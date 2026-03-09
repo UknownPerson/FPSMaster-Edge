@@ -3,11 +3,9 @@ package top.fpsmaster.ui.click.modules.impl;
 import top.fpsmaster.utils.render.draw.Hover;
 import top.fpsmaster.utils.render.draw.Rects;
 
-import org.lwjgl.input.Mouse;
 import top.fpsmaster.FPSMaster;
 import top.fpsmaster.features.manager.Module;
 import top.fpsmaster.features.settings.impl.NumberSetting;
-import top.fpsmaster.ui.click.MainPanel;
 import top.fpsmaster.ui.click.modules.SettingRender;
 import top.fpsmaster.utils.math.anim.AnimMath;
 import top.fpsmaster.ui.common.binding.SettingBinding;
@@ -19,50 +17,44 @@ import java.util.Locale;
 
 public class NumberSettingRender extends SettingRender<NumberSetting> {
     private static final DecimalFormat df = new DecimalFormat("#.##");
+    private static final float SLIDER_WIDTH = 160f;
     // animation
     private float aWidth = 0f;
     private final SettingBinding<Number> binding;
+    private final String captureId;
 
     public NumberSettingRender(Module mod, NumberSetting setting) {
         super(setting);
         this.mod = mod;
         this.binding = new SettingBinding<>(setting);
+        this.captureId = mod.name + ":" + setting.name + ":number";
     }
 
     @Override
-    public void render(float x, float y, float width, float height, float mouseX, float mouseY, boolean custom) {
+    public void render(ScaledGuiScreen screen, float x, float y, float width, float height, float mouseX, float mouseY, boolean custom) {
         float fw = FPSMaster.fontManager.s16.drawString(
                 FPSMaster.i18n.get((mod.name + "." + setting.name).toLowerCase(Locale.getDefault())),
                 x + 10, y + 2, new Color(162, 162, 162).getRGB()
         );
-        Rects.rounded(Math.round(x + 16 + fw), Math.round(y + 3), 160, 6, new Color(0,0,0,80));
+        Rects.rounded(Math.round(x + 16 + fw), Math.round(y + 3), Math.round(SLIDER_WIDTH), 6, new Color(0,0,0,80));
         float percent = (setting.getValue().floatValue() - setting.min.floatValue()) / (setting.max.floatValue() - setting.min.floatValue());
-        aWidth = (float) AnimMath.base(aWidth, 160 * percent, 0.2);
+        aWidth = (float) AnimMath.base(aWidth, SLIDER_WIDTH * percent, 0.2);
         Rects.rounded(Math.round(x + 16 + fw), Math.round(y + 3), Math.round(aWidth), 6, -1);
         FPSMaster.fontManager.s16.drawString(
                 df.format(setting.getValue()),
-                x + fw + 20 + 160,
+                x + fw + 20 + SLIDER_WIDTH,
                 y + 2,
                 new Color(128, 128, 128).getRGB()
         );
-        if (!Mouse.isButtonDown(0)) MainPanel.dragLock = "null";
 
-        ScaledGuiScreen screen = ScaledGuiScreen.getActiveScreen();
-        if (screen != null) {
-            float labelWidth = FPSMaster.fontManager.s16.getStringWidth(
-                    FPSMaster.i18n.get((mod.name + "." + setting.name).toLowerCase(Locale.getDefault()))
-            );
-            ScaledGuiScreen.ConsumedClick click = screen.consumeClickInBounds(x + 16 + labelWidth, y, 160f, height);
-            if (click != null && click.button == 0 && MainPanel.dragLock.equals("null")) {
-                MainPanel.dragLock = mod.name + setting.name + 4;
-            }
-        }
+        float labelWidth = FPSMaster.fontManager.s16.getStringWidth(
+                FPSMaster.i18n.get((mod.name + "." + setting.name).toLowerCase(Locale.getDefault()))
+        );
+        screen.beginPointerCapture(captureId, 0, x + 16 + labelWidth, y, SLIDER_WIDTH, height);
 
-        if (MainPanel.dragLock.equals(mod.name + setting.name + 4)) {
-            float v = mouseX - x - 16 - FPSMaster.fontManager.s16.getStringWidth(
-                    FPSMaster.i18n.get((mod.name + "." + setting.name).toLowerCase(Locale.getDefault()))
-            );
-            float mPercent = v / 160;
+        if (screen.isPointerCapturedBy(captureId, 0)) {
+            float v = mouseX - x - 16 - labelWidth;
+            float mPercent = v / SLIDER_WIDTH;
             float newValue = (setting.max.floatValue() - setting.min.floatValue()) * mPercent + setting.min.floatValue();
             binding.set(newValue);
         }

@@ -2,7 +2,7 @@ package top.fpsmaster.modules.config;
 
 public class Configure {
     public double volume = 1.0;
-    public String background = "new";
+    public String background = "panorama_1";
     public int classicBackgroundColor = 0xFF000000;
     public float classicBackgroundHue = 0f;
     public float classicBackgroundSaturation = 0f;

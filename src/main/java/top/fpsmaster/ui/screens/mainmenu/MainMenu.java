@@ -71,7 +71,7 @@ public class MainMenu extends ScaledGuiScreen {
 
     @Override
     public void render(int mouseX, int mouseY, float partialTicks) {
-        Backgrounds.draw((int) (guiWidth * scaleFactor), (int) (guiHeight * scaleFactor), mouseX, mouseY, partialTicks, (int) zLevel);
+        Backgrounds.draw((int) guiWidth, (int) guiHeight, mouseX, mouseY, partialTicks, (int) zLevel);
         double dt = animClock.tick();
         if (!startAnimation.isRunning() && startAnimation.get() == 0.0) {
             startAnimation.start(0, 1.1, 1.5f, Easings.QUINT_OUT);
@@ -114,28 +114,18 @@ public class MainMenu extends ScaledGuiScreen {
         FPSMaster.fontManager.s16.drawString(FPSMaster.COPYRIGHT, 4, guiHeight - 14, Color.WHITE.getRGB());
         FPSMaster.fontManager.s16.drawString(FPSMaster.CLIENT_NAME + " Client " + FPSMaster.CLIENT_VERSION + " (Minecraft " + FPSMaster.EDITION + ")", 4, guiHeight - 28, Color.WHITE.getRGB());
         if (firstBoot != 2) {
-            FPSMaster.fontManager.s16.drawCenteredString(FPSMaster.i18n.get(firstBoot == 0 ? "mainmenu.oldjava" : "mainmenu.javafail"), width / 2f, height / 2f + 40, Color.WHITE.getRGB());
-            FPSMaster.fontManager.s16.drawCenteredString(FPSMaster.i18n.get("mainmenu.javatip"), width / 2f, height / 2f + 50, Color.WHITE.getRGB());
+            FPSMaster.fontManager.s16.drawCenteredString(FPSMaster.i18n.get(firstBoot == 0 ? "mainmenu.oldjava" : "mainmenu.javafail"), guiWidth / 2f, guiHeight / 2f + 40, Color.WHITE.getRGB());
+            FPSMaster.fontManager.s16.drawCenteredString(FPSMaster.i18n.get("mainmenu.javatip"), guiWidth / 2f, guiHeight / 2f + 50, Color.WHITE.getRGB());
         }
-        Rects.fill(0, 0, width, height, new Color(20, 20, 20, (int) (255 - 255 * Math.max(0, (float) backgroundAnimation.get() - 0.5f))));
+        Rects.fill(0, 0, guiWidth, guiHeight, new Color(20, 20, 20, (int) (255 - 255 * Math.max(0, (float) backgroundAnimation.get() - 0.5f))));
         Images.draw(new ResourceLocation("client/gui/logo.png"), guiWidth / 2f - 153 / 4f, guiHeight / 2f - 30 - 70 * ((float) Math.min(startAnimation.get(), 1)), 153 / 2f, 67f, -1);
         handlePendingClick();
     }
 
     private void handlePendingClick() {
-        if (!hasPendingClick(0) && !hasPendingClick(1) && !hasPendingClick(2)) {
-            return;
-        }
-
-        int mouseX = getPendingClickX();
-        int mouseY = getPendingClickY();
-        int mouseButton = getPendingClickButton();
-
-        if (mouseButton == 0 && Hover.is(guiWidth - 22, 13, 12, 12, mouseX, mouseY)) {
+        if (consumePressInBounds(guiWidth - 22, 13, 12, 12, 0) != null) {
             mc.displayGuiScreen(new BackgroundSelector());
         }
-
-        consumePendingClick();
     }
 }
 

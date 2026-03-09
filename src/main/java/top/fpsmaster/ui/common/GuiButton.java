@@ -1,9 +1,9 @@
 package top.fpsmaster.ui.common;
 
 import net.minecraft.util.ResourceLocation;
-import org.lwjgl.input.Mouse;
 import top.fpsmaster.FPSMaster;
 import top.fpsmaster.ui.common.control.UiControl;
+import top.fpsmaster.utils.render.gui.ScaledGuiScreen;
 import top.fpsmaster.utils.math.anim.ColorAnimator;
 import top.fpsmaster.utils.render.draw.Hover;
 import top.fpsmaster.utils.render.draw.Rects;
@@ -47,6 +47,7 @@ public class GuiButton implements UiControl {
     private long lastRenderNanos = System.nanoTime();
 
     private final ColorAnimator buttonAnimator;
+    private boolean pressed;
 
     public GuiButton(String text, Runnable runnable, Color backgroundColor, Color hoverColor) {
         this.text = text;
@@ -104,7 +105,7 @@ public class GuiButton implements UiControl {
 
         boolean hovered = Hover.is(x, y, width, height, (int) mouseX, (int) mouseY);
         Color target;
-        if (hovered && Mouse.isButtonDown(0)) {
+        if (hovered && pressed) {
             target = pressedColor;
         } else if (hovered) {
             target = hoverColor;
@@ -116,6 +117,12 @@ public class GuiButton implements UiControl {
         Rects.rounded(Math.round(x), Math.round(y), Math.round(width), Math.round(height), roundRadius, buttonAnimator.getColor().getRGB());
         drawStackEffect();
         drawContent();
+    }
+
+    @Override
+    public void renderInScreen(ScaledGuiScreen screen, float x, float y, float width, float height, float mouseX, float mouseY) {
+        pressed = screen.isMouseDown(0);
+        UiControl.super.renderInScreen(screen, x, y, width, height, mouseX, mouseY);
     }
 
     @Override

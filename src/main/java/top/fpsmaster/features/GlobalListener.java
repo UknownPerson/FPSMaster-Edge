@@ -45,6 +45,13 @@ public class GlobalListener {
     public void onChatSend(EventSendChatMessage e) {
     }
 
+    @Subscribe
+    public void onValueChange(EventValueChange e) {
+        if (!FPSMaster.configManager.isLoadingConfig()) {
+            FPSMaster.configManager.saveConfigQuietly("default");
+        }
+    }
+
 
     Thread tickThread;
 

@@ -57,15 +57,14 @@ public final class BoundTextFieldControl implements UiControl {
     @Override
     public void renderInScreen(ScaledGuiScreen screen, float x, float y, float width, float height, float mouseX, float mouseY) {
         render(x, y, width, height, mouseX, mouseY);
-        if (screen.hasClickEventThisFrame()) {
-            int clickX = screen.peekPendingClickX();
-            int clickY = screen.peekPendingClickY();
-            boolean inside = clickX >= x && clickX <= x + width && clickY >= y && clickY <= y + height;
+        ScaledGuiScreen.PointerEvent pendingPress = screen.peekAnyPress();
+        if (pendingPress != null) {
+            boolean inside = pendingPress.x >= x && pendingPress.x <= x + width && pendingPress.y >= y && pendingPress.y <= y + height;
             if (!inside) {
                 textField.setFocused(false);
             }
         }
-        ScaledGuiScreen.ConsumedClick click = screen.consumeClickInBounds(x, y, width, height);
+        ScaledGuiScreen.PointerEvent click = screen.consumePressInBounds(x, y, width, height);
         if (click != null) {
             mouseClicked(click.x, click.y, click.button);
         }

@@ -26,6 +26,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 
+import top.fpsmaster.exception.FileException;
+
 public class BackgroundSelector extends ScaledGuiScreen {
 
     private static final float CARD_HEIGHT = 75f;
@@ -79,8 +81,18 @@ public class BackgroundSelector extends ScaledGuiScreen {
     }
 
     @Override
+    public void onGuiClosed() {
+        super.onGuiClosed();
+        try {
+            FPSMaster.configManager.saveConfig("default");
+        } catch (FileException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
     public void render(int mouseX, int mouseY, float partialTicks) {
-        Backgrounds.draw((int) (guiWidth * scaleFactor), (int) (guiHeight * scaleFactor), mouseX, mouseY, partialTicks, (int) zLevel);
+        Backgrounds.draw((int) guiWidth, (int) guiHeight, mouseX, mouseY, partialTicks, (int) zLevel);
 
         double dt = animClock.tick();
         if (!openAnimation.isRunning() && openAnimation.get() == 0.0) {
@@ -114,7 +126,7 @@ public class BackgroundSelector extends ScaledGuiScreen {
         GL11.glEnable(GL11.GL_SCISSOR_TEST);
         Scissor.apply(contentX, contentY, contentWidth, contentHeight);
 
-        scrollContainer.draw(contentX, contentY, contentWidth, contentHeight, mouseX, mouseY, () -> {
+        scrollContainer.draw(this, contentX, contentY, contentWidth, contentHeight, mouseX, mouseY, () -> {
             float listY = LIST_TOP_PADDING + scrollContainer.getScroll();
             for (BackgroundOption option : OPTIONS) {
                 float cardY = contentY + listY;
@@ -212,7 +224,7 @@ public class BackgroundSelector extends ScaledGuiScreen {
         float editorHeight = getClassicEditorHeight();
         Rects.rounded(Math.round(x), Math.round(y), Math.round(width), Math.round(editorHeight), 10,
                 new Color(35, 35, 40, (int) (180 * alpha)));
-        classicColorRender.render(x + 4f, y + 4f, width - 8f, 12f, mouseX, mouseY, true);
+        classicColorRender.render(this, x + 4f, y + 4f, width - 8f, 12f, mouseX, mouseY, true);
     }
 
     private void syncClassicBackgroundConfig() {
@@ -230,20 +242,18 @@ public class BackgroundSelector extends ScaledGuiScreen {
     }
 
     private void handlePendingClick(float panelX, float panelY, float panelWidth, float panelHeight) {
-        if (!hasPendingClick(0)) {
-            return;
-        }
-
-        int mouseX = getPendingClickX();
-        int mouseY = getPendingClickY();
         float contentX = panelX + 12f;
         float contentY = panelY + 52f;
         float contentWidth = panelWidth - 24f;
         float contentHeight = panelHeight - 92f;
 
-        if (!Hover.is(contentX, contentY, contentWidth, contentHeight, mouseX, mouseY)) {
+        ScaledGuiScreen.PointerEvent click = consumePressInBounds(contentX, contentY, contentWidth, contentHeight, 0);
+        if (click == null) {
             return;
         }
+
+        int mouseX = click.x;
+        int mouseY = click.y;
 
         float listY = LIST_TOP_PADDING + scrollContainer.getScroll();
         for (BackgroundOption option : OPTIONS) {
@@ -262,7 +272,6 @@ public class BackgroundSelector extends ScaledGuiScreen {
                 } else {
                     FPSMaster.configManager.configure.background = option.id;
                 }
-                consumePendingClick();
                 return;
             }
             listY += CARD_HEIGHT;

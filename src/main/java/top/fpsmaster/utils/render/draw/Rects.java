@@ -74,7 +74,8 @@ public class Rects {
 
     public static void roundedImage(int x, int y, int width, int height, int radius, Color color) {
         try {
-            ResourceLocation mask = AWTUtils.generateRoundImage(width, height, radius);
+            float pixelScale = UiScale.isActive() ? UiScale.getPixelScale() : 1.0f;
+            ResourceLocation mask = AWTUtils.generateRoundImage(width, height, radius, pixelScale);
             Images.draw(mask, x, y, width, height, color.getRGB(), false);
         } catch (IllegalArgumentException e) {
             fill(x, y, width, height, color);
@@ -87,7 +88,8 @@ public class Rects {
             fill(x, y, width, height, color);
             return;
         }
-        ResourceLocation[] resourceLocations = AWTUtils.generateRound(radius);
+        float pixelScale = UiScale.isActive() ? UiScale.getPixelScale() : 1.0f;
+        ResourceLocation[] resourceLocations = AWTUtils.generateRound(radius, pixelScale);
         if (resourceLocations == null || resourceLocations.length == 0) {
             return;
         }

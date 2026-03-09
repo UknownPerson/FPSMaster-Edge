@@ -1,12 +1,10 @@
 package top.fpsmaster.ui.click.modules.impl;
 
 import net.minecraft.util.ResourceLocation;
-import org.lwjgl.input.Mouse;
 import top.fpsmaster.FPSMaster;
 import top.fpsmaster.features.manager.Module;
 import top.fpsmaster.features.settings.impl.ColorSetting;
 import top.fpsmaster.features.settings.impl.utils.CustomColor;
-import top.fpsmaster.ui.click.MainPanel;
 import top.fpsmaster.ui.click.modules.SettingRender;
 import top.fpsmaster.ui.common.binding.ColorSettingBinding;
 import top.fpsmaster.utils.math.anim.AnimMath;
@@ -15,7 +13,6 @@ import top.fpsmaster.utils.render.draw.Hover;
 import top.fpsmaster.utils.render.draw.Images;
 import top.fpsmaster.utils.render.draw.Rects;
 import top.fpsmaster.utils.render.gui.ScaledGuiScreen;
-import top.fpsmaster.utils.render.gui.UiScale;
 import top.fpsmaster.utils.render.shader.GradientUtils;
 import top.fpsmaster.utils.system.OSUtil;
 
@@ -34,15 +31,26 @@ public class ColorSettingRender extends SettingRender<ColorSetting> {
     private float expandedHeight = 0f;
     private boolean expand = false;
     private final ColorSettingBinding binding;
+    private final String paletteCaptureId;
+    private final String hueCaptureId;
+    private final String alphaCaptureId;
+    private final String saturationCaptureId;
+    private final String brightnessCaptureId;
 
     public ColorSettingRender(Module mod, ColorSetting setting) {
         super(setting);
         this.mod = mod;
         this.binding = new ColorSettingBinding(setting);
+        String capturePrefix = mod.name + ":" + setting.name + ":color:";
+        this.paletteCaptureId = capturePrefix + "palette";
+        this.hueCaptureId = capturePrefix + "hue";
+        this.alphaCaptureId = capturePrefix + "alpha";
+        this.saturationCaptureId = capturePrefix + "saturation";
+        this.brightnessCaptureId = capturePrefix + "brightness";
     }
 
     @Override
-    public void render(float x, float y, float width, float height, float mouseX, float mouseY, boolean custom) {
+    public void render(ScaledGuiScreen screen, float x, float y, float width, float height, float mouseX, float mouseY, boolean custom) {
         String labelKey = (mod.name + "." + setting.name).toLowerCase(Locale.getDefault());
         float labelW = FPSMaster.fontManager.s16.drawString(
                 FPSMaster.i18n.get(labelKey),
@@ -79,31 +87,28 @@ public class ColorSettingRender extends SettingRender<ColorSetting> {
                     new Color(214, 214, 214).getRGB()
             );
             if (showPalette) {
-                renderStaticOrWaveEditor(x, y, mouseX, mouseY, labelW, customColor, expandedHeight);
+                renderStaticOrWaveEditor(screen, x, y, mouseX, mouseY, labelW, customColor, expandedHeight);
             } else {
-                renderDynamicEditor(x, y, mouseX, mouseY, labelW, customColor);
+                renderDynamicEditor(screen, x, y, mouseX, mouseY, labelW, customColor);
             }
         }
 
-        ScaledGuiScreen screen = ScaledGuiScreen.getActiveScreen();
-        if (screen != null) {
-            ScaledGuiScreen.ConsumedClick paletteClick = screen.consumeClickInBounds(colorBoxX, y + 1, COLOR_BOX_W, COLOR_BOX_H);
-            if (paletteClick != null && paletteClick.button == 0) {
-                expand = !expand;
-            }
+        ScaledGuiScreen.PointerEvent paletteClick = screen.consumePressInBounds(colorBoxX, y + 1, COLOR_BOX_W, COLOR_BOX_H, 0);
+        if (paletteClick != null) {
+            expand = !expand;
+        }
 
-            if (expandedHeight > 1f) {
-                ScaledGuiScreen.ConsumedClick modeClick = screen.consumeClickInBounds(modeBoxX, y + 1, MODE_BOX_W, COLOR_BOX_H);
-                if (modeClick != null && modeClick.button == 0) {
-                    setting.cycleColorType();
-                }
+        if (expandedHeight > 1f) {
+            ScaledGuiScreen.PointerEvent modeClick = screen.consumePressInBounds(modeBoxX, y + 1, MODE_BOX_W, COLOR_BOX_H, 0);
+            if (modeClick != null) {
+                setting.cycleColorType();
             }
         }
 
         this.height = expandedHeight + 20f;
     }
 
-    private void renderStaticOrWaveEditor(float x, float y, float mouseX, float mouseY, float labelW, CustomColor customColor, float pickerHeight) {
+    private void renderStaticOrWaveEditor(ScaledGuiScreen screen, float x, float y, float mouseX, float mouseY, float labelW, CustomColor customColor, float pickerHeight) {
         float pickerX = x + labelW + 26;
         float pickerY = y + 16;
 
@@ -118,7 +123,7 @@ public class ColorSettingRender extends SettingRender<ColorSetting> {
                     Color.getHSBColor(customColor.hue, 0f, 1f),
                     Color.getHSBColor(customColor.hue, 1f, 0f),
                     Color.getHSBColor(customColor.hue, 1f, 1f),
-                    UiScale.getScale(),
+                    1f,
                     () -> Rects.roundedImage(Math.round(pickerX), Math.round(pickerY), Math.round(PICKER_W), Math.round(max(pickerHeight, 1f)), 4, Color.WHITE)
             );
         } else {
@@ -133,14 +138,10 @@ public class ColorSettingRender extends SettingRender<ColorSetting> {
 
         float saturation = customColor.saturation;
         float brightness = customColor.brightness;
-        if ((Hover.is(pickerX, pickerY, PICKER_W, pickerHeight, (int) mouseX, (int) mouseY) && Mouse.isButtonDown(0)) || MainPanel.dragLock.equals(mod.name + setting.name + 1)) {
-            if (MainPanel.dragLock.equals("null") && Mouse.isButtonDown(0)) {
-                MainPanel.dragLock = mod.name + setting.name + 1;
-            }
-            if (MainPanel.dragLock.equals(mod.name + setting.name + 1)) {
-                saturation = max(min((mouseX - pickerX) / PICKER_W, 1f), 0f);
-                brightness = max(min(1f - (mouseY - (y + 15)) / pickerHeight, 1f), 0f);
-            }
+        screen.beginPointerCapture(paletteCaptureId, 0, pickerX, pickerY, PICKER_W, pickerHeight);
+        if (screen.isPointerCapturedBy(paletteCaptureId, 0)) {
+            saturation = max(min((mouseX - pickerX) / PICKER_W, 1f), 0f);
+            brightness = max(min(1f - (mouseY - (y + 15)) / pickerHeight, 1f), 0f);
         }
 
         float cursorX = saturation * PICKER_W;
@@ -150,13 +151,9 @@ public class ColorSettingRender extends SettingRender<ColorSetting> {
         float hue = customColor.hue;
         Gradients.hue(x + labelW + 110, y + 16, 10, pickerHeight);
         Images.draw(new ResourceLocation("client/gui/settings/values/color.png"), x + labelW + 112.5f, y + 14 + pickerHeight * customColor.hue, 5f, 5f, -1);
-        if ((Hover.is(x + labelW + 110, y + 16, 10f, pickerHeight, (int) mouseX, (int) mouseY) && Mouse.isButtonDown(0)) || MainPanel.dragLock.equals(mod.name + setting.name + 2)) {
-            if (MainPanel.dragLock.equals("null")) {
-                MainPanel.dragLock = mod.name + setting.name + 2;
-            }
-            if (MainPanel.dragLock.equals(mod.name + setting.name + 2)) {
-                hue = max(min((mouseY - (y + 15)) / pickerHeight, 1f), 0f);
-            }
+        screen.beginPointerCapture(hueCaptureId, 0, x + labelW + 110, y + 16, 10f, pickerHeight);
+        if (screen.isPointerCapturedBy(hueCaptureId, 0)) {
+            hue = max(min((mouseY - (y + 15)) / pickerHeight, 1f), 0f);
         }
 
         float alpha = customColor.alpha;
@@ -165,17 +162,9 @@ public class ColorSettingRender extends SettingRender<ColorSetting> {
             GradientUtils.drawGradientVertical(x + labelW + 122, y + 16, 10f, pickerHeight, new Color(255, 255, 255), new Color(255, 255, 255, 0));
         }
         Images.draw(new ResourceLocation("client/gui/settings/values/color.png"), x + labelW + 124.5f, y + 13.5f + pickerHeight * (1 - alpha), 5f, 5f, -1);
-        if ((Hover.is(x + labelW + 122, y + 16, 10f, pickerHeight, (int) mouseX, (int) mouseY) && Mouse.isButtonDown(0)) || MainPanel.dragLock.equals(mod.name + setting.name + 3)) {
-            if (MainPanel.dragLock.equals("null")) {
-                MainPanel.dragLock = mod.name + setting.name + 3;
-            }
-            if (MainPanel.dragLock.equals(mod.name + setting.name + 3)) {
-                alpha = max(min(1f - (mouseY - (y + 15)) / pickerHeight, 1f), 0f);
-            }
-        }
-
-        if (!Mouse.isButtonDown(0)) {
-            MainPanel.dragLock = "null";
+        screen.beginPointerCapture(alphaCaptureId, 0, x + labelW + 122, y + 16, 10f, pickerHeight);
+        if (screen.isPointerCapturedBy(alphaCaptureId, 0)) {
+            alpha = max(min(1f - (mouseY - (y + 15)) / pickerHeight, 1f), 0f);
         }
 
         if (hue != customColor.hue || saturation != customColor.saturation || brightness != customColor.brightness || alpha != customColor.alpha) {
@@ -183,7 +172,7 @@ public class ColorSettingRender extends SettingRender<ColorSetting> {
         }
     }
 
-    private void renderDynamicEditor(float x, float y, float mouseX, float mouseY, float labelW, CustomColor customColor) {
+    private void renderDynamicEditor(ScaledGuiScreen screen, float x, float y, float mouseX, float mouseY, float labelW, CustomColor customColor) {
         float sliderX = x + labelW + 26;
         float satY = y + 20;
         float brightY = y + 34;
@@ -199,25 +188,13 @@ public class ColorSettingRender extends SettingRender<ColorSetting> {
 
         float saturation = customColor.saturation;
         float brightness = customColor.brightness;
-        if ((Hover.is(sliderX, satY, sliderW, 6f, (int) mouseX, (int) mouseY) && Mouse.isButtonDown(0)) || MainPanel.dragLock.equals(mod.name + setting.name + 4)) {
-            if (MainPanel.dragLock.equals("null") && Mouse.isButtonDown(0)) {
-                MainPanel.dragLock = mod.name + setting.name + 4;
-            }
-            if (MainPanel.dragLock.equals(mod.name + setting.name + 4)) {
-                saturation = max(min((mouseX - sliderX) / sliderW, 1f), 0f);
-            }
+        screen.beginPointerCapture(saturationCaptureId, 0, sliderX, satY, sliderW, 6f);
+        if (screen.isPointerCapturedBy(saturationCaptureId, 0)) {
+            saturation = max(min((mouseX - sliderX) / sliderW, 1f), 0f);
         }
-        if ((Hover.is(sliderX, brightY, sliderW, 6f, (int) mouseX, (int) mouseY) && Mouse.isButtonDown(0)) || MainPanel.dragLock.equals(mod.name + setting.name + 5)) {
-            if (MainPanel.dragLock.equals("null") && Mouse.isButtonDown(0)) {
-                MainPanel.dragLock = mod.name + setting.name + 5;
-            }
-            if (MainPanel.dragLock.equals(mod.name + setting.name + 5)) {
-                brightness = max(min((mouseX - sliderX) / sliderW, 1f), 0f);
-            }
-        }
-
-        if (!Mouse.isButtonDown(0)) {
-            MainPanel.dragLock = "null";
+        screen.beginPointerCapture(brightnessCaptureId, 0, sliderX, brightY, sliderW, 6f);
+        if (screen.isPointerCapturedBy(brightnessCaptureId, 0)) {
+            brightness = max(min((mouseX - sliderX) / sliderW, 1f), 0f);
         }
 
         if (saturation != customColor.saturation || brightness != customColor.brightness) {

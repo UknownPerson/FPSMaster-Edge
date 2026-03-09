@@ -14,6 +14,9 @@ import java.awt.*;
 import java.io.File;
 import java.io.InputStream;
 import java.nio.file.Files;
+
+import org.lwjgl.opengl.GL11;
+
 import static top.fpsmaster.utils.render.state.Alpha.apply;
 
 public class UFontRenderer extends FontRenderer {
@@ -140,24 +143,44 @@ public class UFontRenderer extends FontRenderer {
      */
     @Override
     public int drawString(String text, float x, float y, int color, boolean dropShadow) {
-        if (UiScale.isActive()) {
-            float scale = UiScale.getScale();
-            int scaledSize = Math.max(1, Math.round(size * scale));
-            UFontRenderer renderer = scaledSize == size ? this : FPSMaster.fontManager.getFont(scaledSize);
-            return renderer.drawStringInternal(text, x * scale, y * scale, color, dropShadow);
+        float densityScale = getDensityScale();
+        if (densityScale > 1.0f) {
+            return drawHighDensityString(text, x, y, color, dropShadow, densityScale);
         }
         return drawStringInternal(text, x, y, color, dropShadow);
     }
 
+    private int drawHighDensityString(String text, float x, float y, int color, boolean dropShadow, float densityScale) {
+        UFontRenderer renderer = getDensityRenderer(densityScale);
+        if (renderer == this) {
+            return drawStringInternal(text, x, y, color, dropShadow);
+        }
+
+        float actualDensityScale = renderer.size / (float) size;
+        float inverseScale = 1.0f / actualDensityScale;
+        GL11.glPushMatrix();
+        GL11.glScalef(inverseScale, inverseScale, 1.0f);
+        try {
+            int result = renderer.drawStringInternal(text, x * actualDensityScale, y * actualDensityScale, color, dropShadow, actualDensityScale * 0.5f);
+            return Math.round(result * inverseScale);
+        } finally {
+            GL11.glPopMatrix();
+        }
+    }
+
     private int drawStringInternal(String text, float x, float y, int color, boolean dropShadow) {
+        return drawStringInternal(text, x, y, color, dropShadow, 0.5f);
+    }
+
+    private int drawStringInternal(String text, float x, float y, int color, boolean dropShadow, float shadowOffset) {
         color = apply(color);
         int i;
         if (dropShadow) {
             if (Colors.toColor(color).getAlpha() > 50) {
                 stringCache.renderString(
                         text,
-                        x + 0.5f,
-                        y + 0.5f,
+                        x + shadowOffset,
+                        y + shadowOffset,
                         new Color(20, 20, 20, Colors.toColor(color).getAlpha()).getRGB(),
                         true
                 );
@@ -170,11 +193,13 @@ public class UFontRenderer extends FontRenderer {
     @Override
     public int getStringWidth(String text) {
         text = GlobalTextFilter.filter(text);
-        if (UiScale.isActive()) {
-            float scale = UiScale.getScale();
-            int scaledSize = Math.max(1, Math.round(size * scale));
-            UFontRenderer renderer = scaledSize == size ? this : FPSMaster.fontManager.getFont(scaledSize);
-            return Math.round(renderer.stringCache.getStringWidth(text) / scale);
+        float densityScale = getDensityScale();
+        if (densityScale > 1.0f) {
+            UFontRenderer renderer = getDensityRenderer(densityScale);
+            if (renderer != this) {
+                float actualDensityScale = renderer.size / (float) size;
+                return Math.round(renderer.stringCache.getStringWidth(text) / actualDensityScale);
+            }
         }
         return stringCache.getStringWidth(text);
     }
@@ -184,13 +209,30 @@ public class UFontRenderer extends FontRenderer {
     }
 
     public int getHeight() {
-        if (UiScale.isActive()) {
-            float scale = UiScale.getScale();
-            int scaledSize = Math.max(1, Math.round(size * scale));
-            UFontRenderer renderer = scaledSize == size ? this : FPSMaster.fontManager.getFont(scaledSize);
-            return Math.round(renderer.stringCache.height / 2f / scale);
+        float densityScale = getDensityScale();
+        if (densityScale > 1.0f) {
+            UFontRenderer renderer = getDensityRenderer(densityScale);
+            if (renderer != this) {
+                float actualDensityScale = renderer.size / (float) size;
+                return Math.round(renderer.stringCache.height / 2f / actualDensityScale);
+            }
         }
         return stringCache.height / 2;
+    }
+
+    private float getDensityScale() {
+        if (!UiScale.isActive()) {
+            return 1.0f;
+        }
+        return Math.max(1.0f, UiScale.getPixelScale());
+    }
+
+    private UFontRenderer getDensityRenderer(float densityScale) {
+        int scaledSize = Math.max(size, Math.round(size * densityScale));
+        if (scaledSize == size) {
+            return this;
+        }
+        return FPSMaster.fontManager.getFont(scaledSize);
     }
 
     public float drawStringCapableWithEmojiWithShadow(String text, float x, float y, int color) {

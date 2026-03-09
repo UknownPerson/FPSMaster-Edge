@@ -11,7 +11,6 @@ import top.fpsmaster.features.manager.Module;
 import top.fpsmaster.features.settings.impl.ModeSetting;
 import top.fpsmaster.ui.click.modules.SettingRender;
 import top.fpsmaster.utils.math.anim.AnimMath;
-import top.fpsmaster.utils.render.gui.UiScale;
 import top.fpsmaster.ui.common.binding.SettingBinding;
 import top.fpsmaster.utils.render.gui.ScaledGuiScreen;
 
@@ -30,7 +29,7 @@ public class ModeSettingRender extends SettingRender<ModeSetting> {
     }
 
     @Override
-    public void render(float x, float y, float width, float height, float mouseX, float mouseY, boolean custom) {
+    public void render(ScaledGuiScreen screen, float x, float y, float width, float height, float mouseX, float mouseY, boolean custom) {
         float fw = FPSMaster.fontManager.s16.drawString(
                 FPSMaster.i18n.get((mod.name + "." + setting.name).toLowerCase(Locale.getDefault())),
                 x + 10, y + 8, new Color(162, 162, 162).getRGB()
@@ -55,9 +54,9 @@ public class ModeSettingRender extends SettingRender<ModeSetting> {
         // Rotate this icon
         GL11.glPushMatrix();
         float rotatePercent = expandH / (setting.getModesSize() * 14);
-        GL11.glTranslatef((x + 16 + fw + maxWidth - 12) * UiScale.getScale(), (y + 12) * UiScale.getScale(), 0f);
+        GL11.glTranslatef(x + 16 + fw + maxWidth - 12, y + 12, 0f);
         GL11.glRotatef(rotatePercent * 180, 0f, 0f, 1f);
-        GL11.glTranslatef(-(x + 16 + fw + maxWidth - 12) * UiScale.getScale(), -(y + 12) * UiScale.getScale(), 0f);
+        GL11.glTranslatef(-(x + 16 + fw + maxWidth - 12), -(y + 12), 0f);
         Images.draw(
                 new ResourceLocation("client/gui/settings/icons/arrow.png"),
                 x + 16 + fw + maxWidth - 16,
@@ -85,23 +84,19 @@ public class ModeSettingRender extends SettingRender<ModeSetting> {
         } else {
             expandH = (float) AnimMath.base(expandH, 0.0, 0.2);
         }
-
-        ScaledGuiScreen screen = ScaledGuiScreen.getActiveScreen();
-        if (screen != null) {
-            String label = FPSMaster.i18n.get((mod.name + "." + setting.name).toLowerCase(Locale.getDefault()));
-            float labelW = FPSMaster.fontManager.s16.getStringWidth(label);
-            float clickWidth = Math.max(80f, labelW + 10);
-            ScaledGuiScreen.ConsumedClick headClick = screen.consumeClickInBounds(x + 16 + labelW, y + 4, clickWidth, 16f);
-            if (headClick != null) {
-                expand = !expand;
-            } else if (expand) {
-                for (int i = 1; i <= setting.getModesSize(); i++) {
-                    ScaledGuiScreen.ConsumedClick itemClick = screen.consumeClickInBounds(x + 20 + labelW, y + 4 + i * 14, clickWidth, 16f);
-                    if (itemClick != null) {
-                        binding.set(i - 1);
-                        expand = false;
-                        break;
-                    }
+        String label = FPSMaster.i18n.get((mod.name + "." + setting.name).toLowerCase(Locale.getDefault()));
+        float labelW = FPSMaster.fontManager.s16.getStringWidth(label);
+        float clickWidth = Math.max(80f, labelW + 10);
+        ScaledGuiScreen.PointerEvent headClick = screen.consumePressInBounds(x + 16 + labelW, y + 4, clickWidth, 16f);
+        if (headClick != null) {
+            expand = !expand;
+        } else if (expand) {
+            for (int i = 1; i <= setting.getModesSize(); i++) {
+                ScaledGuiScreen.PointerEvent itemClick = screen.consumePressInBounds(x + 20 + labelW, y + 4 + i * 14, clickWidth, 16f);
+                if (itemClick != null) {
+                    binding.set(i - 1);
+                    expand = false;
+                    break;
                 }
             }
         }

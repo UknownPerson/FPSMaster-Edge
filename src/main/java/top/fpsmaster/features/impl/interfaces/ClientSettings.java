@@ -30,7 +30,7 @@ public class ClientSettings extends InterfaceModule {
     };
     public static ModeSetting fixedScale = new ModeSetting(
             "FixedScale",
-            2,
+            5,
             () -> fixedScaleEnabled.getValue(),
             "0.5x", "0.75x", "1x", "1.25x", "1.5x", "2x", "2.5x", "3x"
     );
@@ -41,17 +41,24 @@ public class ClientSettings extends InterfaceModule {
         return fixedScaleEnabled.getValue();
     }
 
-    public static double getUiScale() {
-        ScaledResolution scaledResolution = new ScaledResolution(mc);
-        int vanillaScale = scaledResolution.getScaleFactor();
+    public static double getUiScaleMultiplier() {
         if (!fixedScaleEnabled.getValue()) {
-            return vanillaScale;
+            return 1.0;
         }
         int index = fixedScale.getValue();
         if (index < 0 || index >= SCALE_VALUES.length) {
-            return vanillaScale;
+            return 1.0;
         }
-        return vanillaScale * SCALE_VALUES[index];
+        return SCALE_VALUES[index];
+    }
+
+    public static int getVanillaGuiScaleFactor() {
+        ScaledResolution scaledResolution = new ScaledResolution(mc);
+        return scaledResolution.getScaleFactor();
+    }
+
+    public static double getUiScale() {
+        return getVanillaGuiScaleFactor() * getUiScaleMultiplier();
     }
 
     public ClientSettings() {

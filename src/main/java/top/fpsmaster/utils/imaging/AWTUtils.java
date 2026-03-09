@@ -15,13 +15,20 @@ public class AWTUtils {
     private static final HashMap<String, ResourceLocation> generatedFull = new HashMap<>();
 
     public static ResourceLocation generateRoundImage(int width, int height, int radius) {
+        return generateRoundImage(width, height, radius, 1.0f);
+    }
+
+    public static ResourceLocation generateRoundImage(int width, int height, int radius, float pixelScale) {
         if (width <= 0 || height <= 0 || radius < 0) {
             throw new IllegalArgumentException("Width, height must be positive and radius must be non-negative");
         }
-        return generatedFull.computeIfAbsent(width + "/" + height + "/" + radius, r -> {
-            int scaledWidth = width * 2;
-            int scaledHeight = height * 2;
-            BufferedImage bufferedImage = new BufferedImage(scaledWidth, scaledHeight, BufferedImage.TYPE_INT_ARGB);
+        float density = Math.max(1.0f, pixelScale);
+        int pixelWidth = Math.max(1, Math.round(width * density));
+        int pixelHeight = Math.max(1, Math.round(height * density));
+        int pixelRadius = Math.max(0, Math.round(radius * density));
+        String cacheKey = pixelWidth + "/" + pixelHeight + "/" + pixelRadius;
+        return generatedFull.computeIfAbsent(cacheKey, r -> {
+            BufferedImage bufferedImage = new BufferedImage(pixelWidth, pixelHeight, BufferedImage.TYPE_INT_ARGB);
             Graphics2D graphics2D = bufferedImage.createGraphics();
             try {
                 graphics2D.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -29,8 +36,8 @@ public class AWTUtils {
                 graphics2D.fillRect(0, 0, bufferedImage.getWidth(), bufferedImage.getHeight());
 
                 graphics2D.setComposite(AlphaComposite.SrcOver);
-                graphics2D.setColor(Color.WHITE); // 白色圆角矩形
-                RoundRectangle2D roundRectangle = new RoundRectangle2D.Float(0, 0, scaledWidth, scaledHeight, radius * 2, radius * 2);
+                graphics2D.setColor(Color.WHITE);
+                RoundRectangle2D roundRectangle = new RoundRectangle2D.Float(0, 0, pixelWidth, pixelHeight, pixelRadius * 2f, pixelRadius * 2f);
                 graphics2D.fill(roundRectangle);
 
                 Minecraft mc = Minecraft.getMinecraft();
@@ -51,10 +58,15 @@ public class AWTUtils {
     }
 
     public static ResourceLocation[] generateRound(int radius) {
-        if (generated.get(radius) != null) {
-            return generated.get(radius);
+        return generateRound(radius, 1.0f);
+    }
+
+    public static ResourceLocation[] generateRound(int radius, float pixelScale) {
+        int pixelRadius = Math.max(1, Math.round(radius * Math.max(1.0f, pixelScale)));
+        if (generated.get(pixelRadius) != null) {
+            return generated.get(pixelRadius);
         }
-        int radius2 = radius * 2;
+        int radius2 = pixelRadius * 2;
 
         BufferedImage bufferedImage = new BufferedImage(radius2, radius2, BufferedImage.TYPE_INT_ARGB);
         java.awt.Graphics2D graphics2D = bufferedImage.createGraphics();
@@ -84,16 +96,16 @@ public class AWTUtils {
                 );
                 graphics2D.fill(roundRectangle);
 
-                locations[i] = Minecraft.getMinecraft().getTextureManager().getDynamicTextureLocation(radius + "_" + fileNames[i], new DynamicTexture(bufferedImage));
+                locations[i] = Minecraft.getMinecraft().getTextureManager().getDynamicTextureLocation(pixelRadius + "_" + fileNames[i], new DynamicTexture(bufferedImage));
             }
 
-            generated.put(radius, locations);
+            generated.put(pixelRadius, locations);
         } catch (Exception exception) {
             exception.printStackTrace();
         } finally {
             graphics2D.dispose();
         }
-        return generated.get(radius);
+        return generated.get(pixelRadius);
     }
 }
 

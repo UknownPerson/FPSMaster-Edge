@@ -27,7 +27,7 @@ public class BooleanSettingRender extends SettingRender<BooleanSetting> {
     }
 
     @Override
-    public void render(float x, float y, float width, float height, float mouseX, float mouseY, boolean custom) {
+    public void render(ScaledGuiScreen screen, float x, float y, float width, float height, float mouseX, float mouseY, boolean custom) {
         box.update();
         if (binding.get()) {
             box.animateTo(new Color(255, 255, 255), 0.2f, Easings.QUAD_IN_OUT);
@@ -40,8 +40,7 @@ public class BooleanSettingRender extends SettingRender<BooleanSetting> {
             x + 26, y + 1, new Color(162, 162, 162).getRGB()
         );
 
-        ScaledGuiScreen screen = ScaledGuiScreen.getActiveScreen();
-        if (screen != null && screen.consumeClickInBounds(x, y, width, height) != null) {
+        if (screen.consumePressInBounds(x, y, width, height) != null) {
             binding.set(!binding.get());
         }
         this.height = 12f;

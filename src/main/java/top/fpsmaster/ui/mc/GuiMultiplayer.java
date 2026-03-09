@@ -156,33 +156,41 @@ public class GuiMultiplayer extends ScaledGuiScreen {
     @Override
     public void render(int mouseX, int mouseY, float partialTicks) {
         super.render(mouseX, mouseY, partialTicks);
-        Backgrounds.draw((int) (guiWidth * scaleFactor), (int) (guiHeight * scaleFactor), mouseX, mouseY, partialTicks, (int) zLevel);
+        Backgrounds.draw((int) guiWidth, (int) guiHeight, mouseX, mouseY, partialTicks, (int) zLevel);
 
         UFontRenderer title = FPSMaster.fontManager.s22;
         title.drawCenteredString(FPSMaster.i18n.get("multiplayer.title"), guiWidth / 2f, 16, -1);
+        float listViewportX = (guiWidth - 400) / 2f;
+        float listViewportY = 60f;
+        float listViewportWidth = 396f;
+        float listViewportHeight = guiHeight - 120f;
+        float rowX = (guiWidth - 340) / 2f;
+        float rowWidth = 340f;
+        float rowHeight = 54f;
         GL11.glPushMatrix();
         GL11.glEnable(GL11.GL_SCISSOR_TEST);
-        Scissor.apply((guiWidth - 400) / 2f, 60f, 400f, guiHeight - 120);
-        scrollContainer.draw((guiWidth - 400) / 2f, 60, 396, guiHeight - 120, mouseX, mouseY, () -> {
+        Scissor.apply(listViewportX, listViewportY, 400f, listViewportHeight);
+        scrollContainer.draw(this, listViewportX, listViewportY, listViewportWidth, listViewportHeight, mouseX, mouseY, () -> {
             float y = 70 + scrollContainer.getScroll();
-            Rects.rounded(Math.round((guiWidth - 400) / 2f), Math.round(y - 10), 400, Math.round(guiHeight - y), 5, new Color(0, 0, 0, 70).getRGB());
+            Rects.rounded(Math.round(listViewportX), Math.round(y - 10), 400, Math.round(guiHeight - y), 5, new Color(0, 0, 0, 70).getRGB());
             for (ServerListEntry server : serverListDisplay) {
                 if (server.getServerData() == null) {
                     return;
                 }
-                Rects.rounded(Math.round((guiWidth - 340) / 2f), Math.round(y), 340, 54, new Color(0, 0, 0, 120));
-                if (Hover.is((guiWidth - 340) / 2f, y, 340, 54, mouseX, mouseY)) {
-                    if (hasPendingClick(0)){
+                Rects.rounded(Math.round(rowX), Math.round(y), Math.round(rowWidth), Math.round(rowHeight), new Color(0, 0, 0, 120));
+                boolean rowVisible = y + rowHeight > listViewportY && y < listViewportY + listViewportHeight;
+                boolean mouseInViewport = Hover.is(listViewportX, listViewportY, listViewportWidth, listViewportHeight, mouseX, mouseY);
+                if (rowVisible && mouseInViewport && Hover.is(rowX, y, rowWidth, rowHeight, mouseX, mouseY)) {
+                    if (consumePressInBounds(rowX, y, rowWidth, rowHeight, 0) != null) {
                         selectedServer = server.getServerData();
-                        consumePendingClick();
                     }
-                    Rects.rounded(Math.round((guiWidth - 340) / 2f), Math.round(y), 340, 54, new Color(0, 0, 0, 50));
+                    Rects.rounded(Math.round(rowX), Math.round(y), Math.round(rowWidth), Math.round(rowHeight), new Color(0, 0, 0, 50));
                 }
 
                 if (selectedServer != null && selectedServer == server.getServerData()) {
-                    Rects.rounded(Math.round((guiWidth - 340) / 2f), Math.round(y), 340, 54, new Color(255, 255, 255, 50));
+                    Rects.rounded(Math.round(rowX), Math.round(y), Math.round(rowWidth), Math.round(rowHeight), new Color(255, 255, 255, 50));
                 }
-                server.drawEntry(0, (int) ((guiWidth - 340) / 2), (int) y, 340, 54, mouseX, mouseY, false);
+                server.drawEntry(0, (int) rowX, (int) y, (int) rowWidth, (int) rowHeight, mouseX, mouseY, false);
                 y += 58;
             }
             scrollContainer.setHeight(y - 50 - scrollContainer.getScroll());

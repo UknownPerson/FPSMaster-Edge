@@ -1,6 +1,7 @@
 package top.fpsmaster.ui.click.modules;
 
 import top.fpsmaster.features.settings.Setting;
+import top.fpsmaster.utils.render.gui.ScaledGuiScreen;
 
 public class SettingRender<T extends Setting<?>> extends ValueRender {
 
@@ -12,7 +13,7 @@ public class SettingRender<T extends Setting<?>> extends ValueRender {
 
     @Override
     public void render(
-            float x, float y, float width, float height, float mouseX, float mouseY, boolean custom
+            ScaledGuiScreen screen, float x, float y, float width, float height, float mouseX, float mouseY, boolean custom
     ) {
     }
 

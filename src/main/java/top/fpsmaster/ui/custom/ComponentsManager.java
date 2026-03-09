@@ -8,8 +8,10 @@ import top.fpsmaster.ui.custom.impl.*;
 import top.fpsmaster.utils.core.Utility;
 import top.fpsmaster.utils.render.gui.GuiScale;
 import top.fpsmaster.utils.render.gui.UiScale;
+import top.fpsmaster.modules.logger.ClientLogger;
 
 import java.util.ArrayList;
+import java.util.function.Supplier;
 
 import static top.fpsmaster.utils.core.Utility.mc;
 
@@ -22,23 +24,32 @@ public class ComponentsManager {
 
     // Initialize all components
     public void init() {
-        components.add(new FPSDisplayComponent());
-        components.add(new ArmorDisplayComponent());
-        components.add(new ScoreboardComponent());
-        components.add(new PotionDisplayComponent());
-        components.add(new CPSDisplayComponent());
-        components.add(new KeystrokesComponent());
-        components.add(new ReachDisplayComponent());
-        components.add(new ComboDisplayComponent());
-        components.add(new InventoryDisplayComponent());
-        components.add(new TargetHUDComponent());
-        components.add(new PlayerDisplayComponent());
-        components.add(new PingDisplayComponent());
-        components.add(new CoordsDisplayComponent());
-        components.add(new ModsListComponent());
-        components.add(new MiniMapComponent());
-        components.add(new SprintComponent());
-        components.add(new ItemCountDisplayComponent());
+        addComponentSafely("FPSDisplayComponent", FPSDisplayComponent::new);
+        addComponentSafely("ArmorDisplayComponent", ArmorDisplayComponent::new);
+        addComponentSafely("ScoreboardComponent", ScoreboardComponent::new);
+        addComponentSafely("PotionDisplayComponent", PotionDisplayComponent::new);
+        addComponentSafely("CPSDisplayComponent", CPSDisplayComponent::new);
+        addComponentSafely("KeystrokesComponent", KeystrokesComponent::new);
+        addComponentSafely("ReachDisplayComponent", ReachDisplayComponent::new);
+        addComponentSafely("ComboDisplayComponent", ComboDisplayComponent::new);
+        addComponentSafely("InventoryDisplayComponent", InventoryDisplayComponent::new);
+        addComponentSafely("TargetHUDComponent", TargetHUDComponent::new);
+        addComponentSafely("PlayerDisplayComponent", PlayerDisplayComponent::new);
+        addComponentSafely("PingDisplayComponent", PingDisplayComponent::new);
+        addComponentSafely("CoordsDisplayComponent", CoordsDisplayComponent::new);
+        addComponentSafely("ModsListComponent", ModsListComponent::new);
+        addComponentSafely("MiniMapComponent", MiniMapComponent::new);
+        addComponentSafely("SprintComponent", SprintComponent::new);
+        addComponentSafely("ItemCountDisplayComponent", ItemCountDisplayComponent::new);
+    }
+
+    private void addComponentSafely(String name, Supplier<Component> supplier) {
+        try {
+            components.add(supplier.get());
+        } catch (Throwable throwable) {
+            ClientLogger.error("Failed to initialize component: " + name);
+            throwable.printStackTrace();
+        }
     }
 
     // Get a component by its class type

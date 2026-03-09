@@ -30,7 +30,7 @@ public class MultipleItemSettingRender extends SettingRender<MultipleItemSetting
     private float itemWidth;
     private final MultipleItemSettingBinding binding;
     @Override
-    public void render(float x, float y, float width, float height, float mouseX, float mouseY, boolean custom) {
+    public void render(ScaledGuiScreen screen, float x, float y, float width, float height, float mouseX, float mouseY, boolean custom) {
         FPSMaster.fontManager.s16.drawString(
                 FPSMaster.i18n.get((mod.name + "." + setting.name).toLowerCase(Locale.getDefault())),
                 x + xOffset, y + 1, new Color(162, 162, 162).getRGB()
@@ -58,28 +58,24 @@ public class MultipleItemSettingRender extends SettingRender<MultipleItemSetting
             this.height = (index * (itemHeight + padding)) + 10;
         }
 
-        ScaledGuiScreen screen = ScaledGuiScreen.getActiveScreen();
-        if (screen != null) {
-            ScaledGuiScreen.ConsumedClick addClick = screen.consumeClickInBounds(x + 10 + xOffset + itemWidth - 15, y - 3, 10, 10);
-            if (addClick != null && addClick.button == 0) {
-                ItemStack heldItem = Utility.mc.thePlayer.getHeldItem();
-                if (heldItem != null) {
-                    binding.addItem(heldItem);
-                    return;
-                }
-            }
-
-            for (int i = 0; i < binding.get().size(); i++) {
-                float rx = x + 10 + xOffset + itemWidth - (padding * 2) - buttonSize;
-                float ry = (y + FPSMaster.fontManager.s16.getHeight() + 5 + padding * 2) + (i * (buttonSize + (padding * 3)));
-                ScaledGuiScreen.ConsumedClick removeClick = screen.consumeClickInBounds(rx, ry, buttonSize, buttonSize);
-                if (removeClick != null && removeClick.button == 0) {
-                    binding.removeItem(i);
-                    break;
-                }
+        ScaledGuiScreen.PointerEvent addClick = screen.consumePressInBounds(x + 10 + xOffset + itemWidth - 15, y - 3, 10, 10, 0);
+        if (addClick != null) {
+            ItemStack heldItem = Utility.mc.thePlayer.getHeldItem();
+            if (heldItem != null) {
+                binding.addItem(heldItem);
+                return;
             }
         }
 
+        for (int i = 0; i < binding.get().size(); i++) {
+            float rx = x + 10 + xOffset + itemWidth - (padding * 2) - buttonSize;
+            float ry = (y + FPSMaster.fontManager.s16.getHeight() + 5 + padding * 2) + (i * (buttonSize + (padding * 3)));
+            ScaledGuiScreen.PointerEvent removeClick = screen.consumePressInBounds(rx, ry, buttonSize, buttonSize, 0);
+            if (removeClick != null) {
+                binding.removeItem(i);
+                break;
+            }
+        }
     }
 
     public void renderButton(float x, float y, float mouseX, float mouseY, String icon) {

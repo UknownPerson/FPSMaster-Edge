@@ -40,6 +40,7 @@ public class Keystrokes extends InterfaceModule {
     public Keystrokes() {
         super("Keystrokes", Category.Interface);
         CPSDisplay.ensureTracking();
+        roundRadius.setValue(2);
         addSettings(
                 fontShadow, betterFont,
                 pressedColor, fontColor, pressedFontColor,

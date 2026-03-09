@@ -11,8 +11,11 @@ import org.lwjgl.opengl.GL11;
 import top.fpsmaster.FPSMaster;
 import top.fpsmaster.features.impl.InterfaceModule;
 import top.fpsmaster.features.impl.interfaces.ClientSettings;
+import top.fpsmaster.features.manager.Category;
+import top.fpsmaster.features.manager.Module;
 import top.fpsmaster.font.impl.UFontRenderer;
 import net.minecraft.client.Minecraft;
+import top.fpsmaster.modules.logger.ClientLogger;
 import top.fpsmaster.ui.click.MainPanel;
 import top.fpsmaster.utils.core.Utility;
 import top.fpsmaster.utils.math.anim.AnimMath;
@@ -41,7 +44,15 @@ public class Component {
     public Position position = Position.LT;
 
     public Component(Class<?> clazz) {
-        this.mod = (InterfaceModule) FPSMaster.moduleManager.getModule(clazz);
+        Module module = FPSMaster.moduleManager.getModule(clazz);
+        if (module instanceof InterfaceModule) {
+            this.mod = (InterfaceModule) module;
+            return;
+        }
+
+        ClientLogger.warn("Missing interface module for component: " + clazz.getName());
+        this.mod = new InterfaceModule(clazz.getSimpleName(), Category.Interface);
+        this.mod.set(false);
     }
 
     public void draw(float x, float y) {
@@ -108,7 +119,7 @@ public class Component {
                 FPSMaster.componentsManager.dragLock = "";
             }
             if (Hover.is(rX, rY, scaledWidth, scaledHeight, mouseX, mouseY) || drag) {
-                if (!MainPanel.dragLock.equals("null"))
+                if (Utility.mc.currentScreen instanceof MainPanel && ((MainPanel) Utility.mc.currentScreen).hasPointerCapture())
                     return;
                 if (allowScale) {
                     int dWheel = Mouse.getDWheel();

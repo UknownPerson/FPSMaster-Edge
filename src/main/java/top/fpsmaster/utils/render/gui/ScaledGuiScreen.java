@@ -10,13 +10,12 @@ import top.fpsmaster.features.impl.interfaces.ClientSettings;
 import java.io.IOException;
 
 public class ScaledGuiScreen extends GuiScreen {
-    private static final class ClickEvent {
-        private final int x;
-        private final int y;
-        private final int button;
-        private boolean consumed;
+    public static final class PointerEvent {
+        public final int x;
+        public final int y;
+        public final int button;
 
-        private ClickEvent(int x, int y, int button) {
+        public PointerEvent(int x, int y, int button) {
             this.x = x;
             this.y = y;
             this.button = button;
@@ -26,29 +25,49 @@ public class ScaledGuiScreen extends GuiScreen {
     public float scaleFactor = 1.0f;
     public float guiWidth;
     public float guiHeight;
-    private int vanillaScaleFactor = 1;
-    private ClickEvent pendingClick;
+
+    private float renderScale = 1.0f;
+    private float vanillaScaleFactor = 1.0f;
+    private final GuiInputState inputState = new GuiInputState();
+    private final GuiDragState dragState = new GuiDragState();
+
     private static ScaledGuiScreen activeScreen;
 
     public static ScaledGuiScreen getActiveScreen() {
         return activeScreen;
     }
 
+    public static boolean isScaledGuiActive() {
+        return activeScreen != null;
+    }
+
+    public static float getActiveRenderScale() {
+        return activeScreen == null ? 1.0f : activeScreen.renderScale;
+    }
+
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
         refreshScaleAndMetrics();
-        float effectiveScale = scaleFactor;
-        UiScale.begin(effectiveScale);
+        inputState.updateMousePosition(getLogicalMouseX(mouseX), getLogicalMouseY(mouseY));
+        if (dragState.isDragging() && !inputState.isButtonDown(dragState.getButton())) {
+            dragState.clear();
+        }
+
+        UiScale.begin(
+                scaleFactor,
+                vanillaScaleFactor,
+                guiWidth,
+                guiHeight,
+                mc.displayWidth,
+                mc.displayHeight
+        );
         GL11.glPushMatrix();
         try {
             activeScreen = this;
-            GL11.glScalef(1f / vanillaScaleFactor, 1f / vanillaScaleFactor, 1f);
-            int rawMouseX = (int) (Mouse.getX() / scaleFactor);
-            int rawMouseY = (int) ((Minecraft.getMinecraft().displayHeight - Mouse.getY() - 1) / scaleFactor);
-            super.drawScreen(rawMouseX, rawMouseY, partialTicks);
-            render(rawMouseX, rawMouseY, partialTicks);
-            pendingClick = null;
+            GL11.glScalef(renderScale, renderScale, 1f);
+            render(inputState.getMouseX(), inputState.getMouseY(), partialTicks);
         } finally {
+            inputState.finishFrame();
             activeScreen = null;
             GL11.glPopMatrix();
             UiScale.end();
@@ -64,24 +83,52 @@ public class ScaledGuiScreen extends GuiScreen {
     @Override
     public void initGui() {
         refreshScaleAndMetrics();
+        inputState.reset();
+        dragState.clear();
         super.initGui();
-    }
-
-    @Override
-    public void mouseClicked(int mouseX, int mouseY, int mouseButton) throws IOException {
-        super.mouseClicked(mouseX, mouseY, mouseButton);
-        pendingClick = new ClickEvent(mouseX, mouseY, mouseButton);
     }
 
     @Override
     public void handleMouseInput() throws IOException {
         refreshScaleAndMetrics();
-        super.handleMouseInput();
+
+        int logicalMouseX = getLogicalMouseX();
+        int logicalMouseY = getLogicalMouseY();
+        inputState.updateMousePosition(logicalMouseX, logicalMouseY);
+
+        int eventButton = Mouse.getEventButton();
+        if (eventButton != -1) {
+            if (Mouse.getEventButtonState()) {
+                inputState.pressButton(eventButton, logicalMouseX, logicalMouseY);
+                mousePressed(logicalMouseX, logicalMouseY, eventButton);
+            } else {
+                inputState.releaseButton(eventButton);
+                mouseReleased(logicalMouseX, logicalMouseY, eventButton);
+                if (dragState.isDragging() && dragState.getButton() == eventButton) {
+                    dragState.clear();
+                }
+            }
+        }
+
+        int wheelDelta = Mouse.getEventDWheel();
+        if (wheelDelta != 0) {
+            inputState.addWheelDelta(wheelDelta);
+            mouseScrolled(logicalMouseX, logicalMouseY, wheelDelta);
+        }
+    }
+
+    protected void mousePressed(int mouseX, int mouseY, int mouseButton) throws IOException {
+    }
+
+    protected void mouseReleased(int mouseX, int mouseY, int mouseButton) {
+    }
+
+    protected void mouseScrolled(int mouseX, int mouseY, int wheelDelta) {
     }
 
     private void refreshScaleAndMetrics() {
-        scaleFactor = (float) ClientSettings.getUiScale();
-        if (scaleFactor <= 0) {
+        scaleFactor = (float) ClientSettings.getUiScaleMultiplier();
+        if (scaleFactor <= 0f) {
             scaleFactor = 1.0f;
         }
         updateBaseMetrics();
@@ -89,83 +136,152 @@ public class ScaledGuiScreen extends GuiScreen {
 
     private void updateBaseMetrics() {
         Minecraft mc = Minecraft.getMinecraft();
-        ScaledResolution sr = new ScaledResolution(mc);
-        vanillaScaleFactor = sr.getScaleFactor();
+        ScaledResolution scaledResolution = new ScaledResolution(mc);
+        vanillaScaleFactor = Math.max(1, scaledResolution.getScaleFactor());
+        renderScale = scaleFactor / vanillaScaleFactor;
+        if (renderScale <= 0f) {
+            renderScale = 1.0f;
+        }
         guiWidth = mc.displayWidth / scaleFactor;
         guiHeight = mc.displayHeight / scaleFactor;
-        width = (int) guiWidth;
-        height = (int) guiHeight;
     }
 
     public void render(int mouseX, int mouseY, float partialTicks) {
-
     }
 
-    protected boolean consumeClick(float x, float y, float width, float height, int button) {
-        if (pendingClick == null || pendingClick.consumed || pendingClick.button != button) {
+    public boolean isMouseDown(int button) {
+        return inputState.isButtonDown(button);
+    }
+
+    public int getMouseX() {
+        return inputState.getMouseX();
+    }
+
+    public int getMouseY() {
+        return inputState.getMouseY();
+    }
+
+    public int consumeWheelDelta() {
+        return inputState.consumeWheelDelta();
+    }
+
+    public int consumeWheelDelta(float x, float y, float width, float height) {
+        if (!top.fpsmaster.utils.render.draw.Hover.is(x, y, width, height, getMouseX(), getMouseY())) {
+            return 0;
+        }
+        return consumeWheelDelta();
+    }
+
+    public int getWheelDelta() {
+        return inputState.getWheelDelta();
+    }
+
+    public boolean hasAnyClickThisFrame() {
+        return inputState.hasPressEvent();
+    }
+
+    public int getLatestClickX() {
+        GuiInputState.MouseButtonEvent latestPress = inputState.getLatestPress();
+        return latestPress == null ? 0 : latestPress.getX();
+    }
+
+    public int getLatestClickY() {
+        GuiInputState.MouseButtonEvent latestPress = inputState.getLatestPress();
+        return latestPress == null ? 0 : latestPress.getY();
+    }
+
+    public boolean beginDrag(Object owner, float x, float y, float width, float height) {
+        return beginDrag(owner, 0, x, y, width, height);
+    }
+
+    public boolean beginDrag(Object owner, int button, float x, float y, float width, float height) {
+        if (dragState.isDragging(owner)) {
+            return true;
+        }
+        PointerEvent click = consumeClickInBounds(x, y, width, height, button);
+        if (click == null) {
             return false;
         }
-        if (pendingClick.x < x || pendingClick.x > x + width || pendingClick.y < y || pendingClick.y > y + height) {
-            return false;
-        }
-        pendingClick.consumed = true;
-        return true;
+        return dragState.acquire(owner, button);
     }
 
-    protected boolean hasPendingClick(int button) {
-        return pendingClick != null && !pendingClick.consumed && pendingClick.button == button;
+    public boolean isDragging(Object owner) {
+        return dragState.isDragging(owner) && isMouseDown(dragState.getButton());
     }
 
-    protected int getPendingClickX() {
-        return pendingClick == null ? 0 : pendingClick.x;
+    public boolean hasActiveDrag() {
+        return dragState.isDragging() && isMouseDown(dragState.getButton());
     }
 
-    protected int getPendingClickY() {
-        return pendingClick == null ? 0 : pendingClick.y;
+    public boolean hasPointerCapture() {
+        return hasActiveDrag();
     }
 
-    protected int getPendingClickButton() {
-        return pendingClick == null ? -1 : pendingClick.button;
+    public void releaseDrag(Object owner) {
+        dragState.release(owner);
     }
 
-    protected void consumePendingClick() {
-        if (pendingClick != null) {
-            pendingClick.consumed = true;
-        }
+    public boolean beginPointerCapture(Object owner, int button, float x, float y, float width, float height) {
+        return beginDrag(owner, button, x, y, width, height);
     }
 
-    public boolean hasClickEventThisFrame() {
-        return pendingClick != null;
+    public boolean isPointerCapturedBy(Object owner, int button) {
+        return dragState.isDragging(owner) && dragState.getButton() == button && isMouseDown(button);
     }
 
-    public int peekPendingClickX() {
-        return pendingClick == null ? 0 : pendingClick.x;
+    public void releasePointerCapture(Object owner) {
+        releaseDrag(owner);
     }
 
-    public int peekPendingClickY() {
-        return pendingClick == null ? 0 : pendingClick.y;
-    }
-
-    public static final class ConsumedClick {
-        public final int x;
-        public final int y;
-        public final int button;
-
-        public ConsumedClick(int x, int y, int button) {
-            this.x = x;
-            this.y = y;
-            this.button = button;
-        }
-    }
-
-    public ConsumedClick consumeClickInBounds(float x, float y, float width, float height) {
-        if (pendingClick == null || pendingClick.consumed) {
+    public PointerEvent peekAnyPress() {
+        GuiInputState.MouseButtonEvent latestPress = inputState.getLatestPress();
+        if (latestPress == null) {
             return null;
         }
-        if (pendingClick.x < x || pendingClick.x > x + width || pendingClick.y < y || pendingClick.y > y + height) {
+        return new PointerEvent(latestPress.getX(), latestPress.getY(), latestPress.getButton());
+    }
+
+    public PointerEvent consumePressInBounds(float x, float y, float width, float height) {
+        return consumePressInBounds(x, y, width, height, -1);
+    }
+
+    public PointerEvent consumePressInBounds(float x, float y, float width, float height, int button) {
+        GuiInputState.MouseButtonEvent event = inputState.consumePressInBounds(x, y, width, height, button);
+        if (event == null) {
             return null;
         }
-        pendingClick.consumed = true;
-        return new ConsumedClick(pendingClick.x, pendingClick.y, pendingClick.button);
+        return new PointerEvent(event.getX(), event.getY(), event.getButton());
+    }
+
+    public PointerEvent consumeClickInBounds(float x, float y, float width, float height) {
+        return consumePressInBounds(x, y, width, height);
+    }
+
+    public PointerEvent consumeClickInBounds(float x, float y, float width, float height, int button) {
+        return consumePressInBounds(x, y, width, height, button);
+    }
+
+    private int getLogicalMouseX() {
+        return clampLogicalMouseX((int) (Mouse.getX() / scaleFactor));
+    }
+
+    private int getLogicalMouseY() {
+        return clampLogicalMouseY((int) ((Minecraft.getMinecraft().displayHeight - Mouse.getY() - 1) / scaleFactor));
+    }
+
+    private int getLogicalMouseX(int projectedMouseX) {
+        return clampLogicalMouseX((int) (projectedMouseX / Math.max(renderScale, 1.0E-6f)));
+    }
+
+    private int getLogicalMouseY(int projectedMouseY) {
+        return clampLogicalMouseY((int) (projectedMouseY / Math.max(renderScale, 1.0E-6f)));
+    }
+
+    private int clampLogicalMouseX(int mouseX) {
+        return Math.max(0, Math.min(Math.max(0, Math.round(guiWidth)), mouseX));
+    }
+
+    private int clampLogicalMouseY(int mouseY) {
+        return Math.max(0, Math.min(Math.max(0, Math.round(guiHeight)), mouseY));
     }
 }

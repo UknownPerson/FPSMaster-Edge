@@ -55,7 +55,7 @@ public class ModuleRenderer extends ValueRender {
     }
 
     @Override
-    public void render(float x, float y, float width, float height, float mouseX, float mouseY, boolean current) {
+    public void render(ScaledGuiScreen screen, float x, float y, float width, float height, float mouseX, float mouseY, boolean current) {
         content.update();
         background.update();
         border = Hover.is(x + 5, y, width - 10, height, (int) mouseX, (int) mouseY)
@@ -154,6 +154,7 @@ public class ModuleRenderer extends ValueRender {
             for (SettingRender<?> settingsRenderer : settingsRenderers) {
                 if (settingsRenderer.setting.getVisible()) {
                     settingsRenderer.render(
+                            screen,
                             x + 5,
                             y + 40 + settingsHeight,
                             width - 10,
@@ -170,16 +171,13 @@ public class ModuleRenderer extends ValueRender {
         settingHeight = (float) AnimMath.base(settingHeight, settingsHeight, 0.2);
         this.height = settingHeight;
 
-        ScaledGuiScreen screen = ScaledGuiScreen.getActiveScreen();
-        if (screen != null) {
-            ScaledGuiScreen.ConsumedClick click = screen.consumeClickInBounds(x + 5, y, width - 10, 40f);
-            if (click != null) {
-                if (click.button == 0) {
-                    mod.toggle();
-                } else if (click.button == 1) {
-                    expand = !expand;
-                    MainPanel.curModule = null;
-                }
+        ScaledGuiScreen.PointerEvent click = screen.consumePressInBounds(x + 5, y, width - 10, 40f);
+        if (click != null) {
+            if (click.button == 0) {
+                mod.toggle();
+            } else if (click.button == 1) {
+                expand = !expand;
+                MainPanel.curModule = null;
             }
         }
     }

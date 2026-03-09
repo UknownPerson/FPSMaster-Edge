@@ -16,6 +16,7 @@ import top.fpsmaster.FPSMaster;
 import top.fpsmaster.exception.FileException;
 import top.fpsmaster.features.manager.Category;
 import top.fpsmaster.features.manager.Module;
+import top.fpsmaster.modules.logger.ClientLogger;
 import top.fpsmaster.ui.click.component.ScrollContainer;
 import top.fpsmaster.ui.click.modules.ModuleRenderer;
 import top.fpsmaster.utils.math.anim.AnimMath;
@@ -52,6 +53,7 @@ public class MainPanel extends ScaledGuiScreen {
     float categoryAnimation = 30;
 
     boolean close = false;
+    private boolean configSavedOnClose;
 
     float moduleListAlpha = 0f;
     float modHeight = 0f;
@@ -66,8 +68,6 @@ public class MainPanel extends ScaledGuiScreen {
     public static final float leftWidth = 50f;
     public static String bindLock = "";
     public static Module curModule = null;
-    public static String dragLock = "null";
-
     public MainPanel() {
         super();
     }
@@ -96,8 +96,7 @@ public class MainPanel extends ScaledGuiScreen {
         //aiChatPanel.render(mouseX, mouseY, scaleFactor);
         x = (int) ( guiWidth - width) / 2;
         y = (int) (guiHeight - height) / 2;
-        if (!Mouse.isButtonDown(0)) {
-            dragLock = "null";
+        if (!isMouseDown(0)) {
             drag = false;
         }
 
@@ -126,9 +125,9 @@ public class MainPanel extends ScaledGuiScreen {
         Rects.fill(0f, 0f, guiWidth, guiHeight, new Color(0, 0, 0, (int) maskAlpha.get()));
         Alpha.set((float) alphaAnimation.get() / 255f);
 
-        GlStateManager.translate(guiWidth *scaleFactor / 2.0, guiHeight*scaleFactor / 2.0, 0.0);
+        GlStateManager.translate(guiWidth / 2.0, guiHeight / 2.0, 0.0);
         GL11.glScaled(scaleAnimation.get(), scaleAnimation.get(), 0.0);
-        GlStateManager.translate(-guiWidth*scaleFactor / 2.0, -guiHeight*scaleFactor / 2.0, 0.0);
+        GlStateManager.translate(-guiWidth / 2.0, -guiHeight / 2.0, 0.0);
 
 
         Images.draw(new ResourceLocation("client/gui/settings/window/panel.png"),
@@ -157,13 +156,14 @@ public class MainPanel extends ScaledGuiScreen {
         modHeight = 20f;
         float containerWidth = width - leftWidth - 10;
         int finalMouseY = mouseY;
-        modsContainer.draw(x + leftWidth, y + 25f, containerWidth, height - 20f, mouseX, mouseY, () -> {
+        modsContainer.draw(this, x + leftWidth, y + 25f, containerWidth, height - 20f, mouseX, mouseY, () -> {
             float modsY = y + 22f;
             for (ModuleRenderer m : mods) {
                 if (m.mod.category == curType) {
                     float moduleY = modsY + modsContainer.getScroll();
                     if (moduleY + 40 + m.height > y && moduleY < y + height) {
                         m.render(
+                                this,
                                 x + leftWidth + 10,
                                 moduleY,
                                 containerWidth - 10,
@@ -198,7 +198,7 @@ public class MainPanel extends ScaledGuiScreen {
                 Math.round(categoryBgY),
                 Math.round(categoryAnimation),
                 Math.round(categoryBgHeight),
-                20,
+                10,
                 new Color(0, 0, 0, 200)
         );
 
@@ -208,7 +208,7 @@ public class MainPanel extends ScaledGuiScreen {
                 Math.round(selection - 6),
                 Math.round(categoryAnimation - 8),
                 22,
-                20,
+                10,
                 new Color(255, 255, 255)
         );
 
@@ -252,7 +252,7 @@ public class MainPanel extends ScaledGuiScreen {
         GL11.glDisable(GL11.GL_SCISSOR_TEST);
         Alpha.set(1f);
 
-        handlePendingClick();
+        handlePointerPress();
     }
 
     @Override
@@ -269,6 +269,7 @@ public class MainPanel extends ScaledGuiScreen {
         alphaAnimation.start(0.0, 255.0, 0.2f, CLICKGUI_EASE);
         maskAlpha.start(0.0, MASK_MAX_ALPHA, 0.2f, CLICKGUI_EASE);
         close = false;
+        configSavedOnClose = false;
 
 //        if (width == 0f || height == 0f) {
 //            width = scaledWidth / 2f;
@@ -292,11 +293,7 @@ public class MainPanel extends ScaledGuiScreen {
     @Override
     public void onGuiClosed() {
         super.onGuiClosed();
-        try {
-            FPSMaster.configManager.saveConfig("default");
-        } catch (FileException e) {
-            throw new RuntimeException(e);
-        }
+        saveConfigOnClose();
     }
 
     @Override
@@ -305,10 +302,7 @@ public class MainPanel extends ScaledGuiScreen {
 
         if (keyCode == 1) {
             if (scaleAnimation.isRunning() || scaleAnimation.get() != 0.7) {
-                close = true;
-                scaleAnimation.animateTo(0.7, 0.1f, CLICKGUI_EASE);
-                alphaAnimation.animateTo(0.0, 0.1f, CLICKGUI_EASE);
-                maskAlpha.animateTo(0.0, 0.1f, CLICKGUI_EASE);
+                requestClose();
             }
             return;
         }
@@ -322,20 +316,21 @@ public class MainPanel extends ScaledGuiScreen {
         super.keyTyped(typedChar, keyCode);
     }
 
-    private void handlePendingClick() {
-        if (!hasPendingClick(0) && !hasPendingClick(1) && !hasPendingClick(2)) {
+    private void handlePointerPress() {
+        ScaledGuiScreen.PointerEvent press = peekAnyPress();
+        if (press == null) {
             return;
         }
 
-        int mouseX = getPendingClickX();
-        int mouseY = getPendingClickY();
-        int mouseButton = getPendingClickButton();
+        int mouseX = (int) press.x;
+        int mouseY = (int) press.y;
+        int mouseButton = press.button;
 
         if (!Hover.is(x, y, width, height, mouseX, mouseY)) {
             return;
         }
 
-        if (!dragLock.equals("null")) {
+        if (hasPointerCapture()) {
             return;
         }
 
@@ -353,7 +348,28 @@ public class MainPanel extends ScaledGuiScreen {
         }
 
         if (mouseButton == 0) {
-            consumePendingClick();
+            consumePressInBounds(x, y, width, height, mouseButton);
+        }
+    }
+
+    private void requestClose() {
+        saveConfigOnClose();
+        close = true;
+        scaleAnimation.animateTo(0.7, 0.1f, CLICKGUI_EASE);
+        alphaAnimation.animateTo(0.0, 0.1f, CLICKGUI_EASE);
+        maskAlpha.animateTo(0.0, 0.1f, CLICKGUI_EASE);
+    }
+
+    private void saveConfigOnClose() {
+        if (configSavedOnClose) {
+            return;
+        }
+        try {
+            FPSMaster.configManager.saveConfig("default");
+            configSavedOnClose = true;
+        } catch (FileException e) {
+            ClientLogger.error("Failed to save config when closing MainPanel: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 }

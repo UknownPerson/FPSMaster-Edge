@@ -5,11 +5,10 @@ import lombok.Setter;
 import top.fpsmaster.utils.render.draw.Hover;
 import top.fpsmaster.utils.render.draw.Rects;
 
-import org.lwjgl.input.Mouse;
-import top.fpsmaster.ui.click.MainPanel;
 import top.fpsmaster.utils.math.anim.AnimClock;
 import top.fpsmaster.utils.math.anim.Animator;
 import top.fpsmaster.utils.math.anim.Easings;
+import top.fpsmaster.utils.render.gui.ScaledGuiScreen;
 
 import java.awt.*;
 
@@ -26,8 +25,9 @@ public class ScrollContainer {
     private double scrollExpand = 0.0;
     private float scrollStart = 0f;
     private boolean isScrolling = false;
+    private final String captureId = getClass().getName() + "@" + Integer.toHexString(System.identityHashCode(this));
 
-    public void draw(float x, float y, float width, float height, int mouseX, int mouseY, Runnable runnable) {
+    public void draw(ScaledGuiScreen screen, float x, float y, float width, float height, int mouseX, int mouseY, Runnable runnable) {
         double dt = animClock.tick();
         runnable.run();
 
@@ -55,23 +55,20 @@ public class ScrollContainer {
                 )
             ) {
                 scrollExpand = 1.0;
-                if (Mouse.isButtonDown(0)) {
-                    if (!isScrolling && "null".equals(MainPanel.dragLock)) {
-                        isScrolling = true;
-                        MainPanel.dragLock = this.getClass().getSimpleName();
-                        scrollStart = mouseY - sY;
-                    }
+                if (screen.beginPointerCapture(captureId, 0, sX - 1, sY, 2f + (float) scrollExpand, sHeight)) {
+                    isScrolling = true;
+                    scrollStart = mouseY - sY;
                 }
             } else if (!isScrolling) {
                 scrollExpand = 0.0;
             }
 
             if (isScrolling) {
-                if (Mouse.isButtonDown(0)) {
+                if (screen.isPointerCapturedBy(captureId, 0)) {
                     wheel_anim = -((mouseY - scrollStart - y) / height) * this.height;
                 } else {
                     isScrolling = false;
-                    MainPanel.dragLock = "null";
+                    screen.releasePointerCapture(captureId);
                 }
             }
         } else {
@@ -80,8 +77,7 @@ public class ScrollContainer {
 
         if (Hover.is(x,y,width,height, mouseX, mouseY)) {
             if (this.height > height) {
-                // mods list scroll
-                int mouseDWheel = Mouse.getDWheel();
+                int mouseDWheel = screen.consumeWheelDelta(x, y, width, height);
                 if (mouseDWheel > 0) {
                     wheel_anim += 20f;
                 } else if (mouseDWheel < 0) {

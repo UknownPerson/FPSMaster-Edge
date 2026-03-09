@@ -28,7 +28,7 @@ public class BindSettingRender extends SettingRender<BindSetting> {
     }
 
     @Override
-    public void render(float x, float y, float width, float height, float mouseX, float mouseY, boolean custom) {
+    public void render(ScaledGuiScreen screen, float x, float y, float width, float height, float mouseX, float mouseY, boolean custom) {
         float fw = FPSMaster.fontManager.s16.drawString(
             FPSMaster.i18n.get((mod.name + "." + setting.name).toLowerCase(Locale.getDefault())),
             x + 10, y + 2, new Color(234, 234, 234).getRGB()
@@ -53,12 +53,9 @@ public class BindSettingRender extends SettingRender<BindSetting> {
             colorAnimation.base(new Color(0,0,0,80));
         }
 
-        ScaledGuiScreen screen = ScaledGuiScreen.getActiveScreen();
-        if (screen != null) {
-            ScaledGuiScreen.ConsumedClick click = screen.consumeClickInBounds(x + 25 + fw, y, 10f + s16b.getStringWidth(keyName), 12f);
-            if (click != null && click.button == 0 && MainPanel.bindLock.isEmpty()) {
-                MainPanel.bindLock = setting.name;
-            }
+        ScaledGuiScreen.PointerEvent click = screen.consumePressInBounds(x + 25 + fw, y, 10f + s16b.getStringWidth(keyName), 12f, 0);
+        if (click != null && MainPanel.bindLock.isEmpty()) {
+            MainPanel.bindLock = setting.name;
         }
         this.height = 16f;
     }

@@ -230,6 +230,22 @@ public class KeystrokesComponent extends Component {
             return Keystrokes.borderColor.updateAndGetColor(offset);
         }
 
+        private int resolveKeyRadius() {
+            return mod.rounded.getValue() ? mod.roundRadius.getValue().intValue() : 0;
+        }
+
+        private int resolveAnimationRadius(float baseWidth, float baseHeight, float currentWidth, float currentHeight) {
+            int baseRadius = resolveKeyRadius();
+            if (baseRadius <= 0) {
+                return 0;
+            }
+
+            float baseMin = Math.max(1.0f, Math.min(baseWidth, baseHeight));
+            float currentMin = Math.max(0.0f, Math.min(currentWidth, currentHeight));
+            float ratio = Math.min(1.0f, currentMin / baseMin);
+            return Math.max(1, Math.round(baseRadius * ratio));
+        }
+
         private void drawBorderRect(float x, float y, float width, float height, float borderWidth) {
             float bw = borderWidth * scale;
             float scaledW = width * scale;
@@ -238,7 +254,7 @@ public class KeystrokesComponent extends Component {
             float outerY = y - bw;
             float outerW = scaledW + bw * 2f;
             float outerH = scaledH + bw * 2f;
-            int radius = mod.rounded.getValue() ? mod.roundRadius.getValue().intValue() : 0;
+            int radius = resolveKeyRadius();
             Color border = resolveBorderColor(x, y);
 
             StencilUtil.initStencilToWrite();
@@ -290,9 +306,10 @@ public class KeystrokesComponent extends Component {
             }
             float scaledW = width * scale;
             float scaledH = height * scale;
+            int radius = resolveKeyRadius();
             if (mode.equals("Pulse") || mode.equals("Bloom")) {
                 StencilUtil.initStencilToWrite();
-                Rects.rounded(x, y, scaledW, scaledH, mod.rounded.getValue() ? mod.roundRadius.getValue().intValue() : 0, new Color(0, 0, 0, 255).getRGB());
+                Rects.rounded(x, y, scaledW, scaledH, radius, new Color(0, 0, 0, 255).getRGB());
                 StencilUtil.readStencilBuffer(1);
                 for (PressAnim anim : pressAnims) {
                     float progress = Math.min(anim.progress, 1.0f);
@@ -315,6 +332,7 @@ public class KeystrokesComponent extends Component {
                     float progress = Math.min(anim.progress, 1.0f);
                     float sizeW = scaledW * progress;
                     float sizeH = scaledH * progress;
+                    int animationRadius = resolveAnimationRadius(scaledW, scaledH, sizeW, sizeH);
                     float alpha = anim.alpha;
                     Color c = new Color(
                             Keystrokes.pressAnimColor.getColor().getRed(),
@@ -322,7 +340,7 @@ public class KeystrokesComponent extends Component {
                             Keystrokes.pressAnimColor.getColor().getBlue(),
                             (int) (Keystrokes.pressAnimColor.getColor().getAlpha() * alpha)
                     );
-                    Rects.rounded(x + scaledW / 2f - sizeW / 2f, y + scaledH / 2f - sizeH / 2f, sizeW, sizeH, mod.rounded.getValue() ? mod.roundRadius.getValue().intValue() : 0, c.getRGB());
+                    Rects.rounded(x + scaledW / 2f - sizeW / 2f, y + scaledH / 2f - sizeH / 2f, sizeW, sizeH, animationRadius, c.getRGB());
                 }
             }
         }

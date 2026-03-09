@@ -58,11 +58,10 @@ public class Backgrounds {
     }
 
     public static void draw(int guiWidth, int guiHeight, int mouseX, int mouseY, float partialTicks, int zLevel) {
-        float uiScale = UiScale.isActive() ? UiScale.getScale() : 1.0f;
-        int scaledGuiWidth = Math.round(guiWidth / uiScale);
-        int scaledGuiHeight = Math.round(guiHeight / uiScale);
-        int scaledMouseX = Math.round(mouseX * uiScale);
-        int scaledMouseY = Math.round(mouseY * uiScale);
+        int scaledGuiWidth = guiWidth;
+        int scaledGuiHeight = guiHeight;
+        int scaledMouseX = mouseX;
+        int scaledMouseY = mouseY;
 
         String backgroundMode = FPSMaster.configManager.configure.background;
         if ("custom".equals(backgroundMode)) {
@@ -147,11 +146,13 @@ public class Backgrounds {
     }
 
     private static boolean isPanoramaMode(String backgroundMode) {
-        return "panorama".equals(backgroundMode) || (backgroundMode != null && backgroundMode.startsWith("panorama_"));
+        return "panorama".equals(backgroundMode)
+                || "new".equals(backgroundMode)
+                || (backgroundMode != null && backgroundMode.startsWith("panorama_"));
     }
 
     private static String normalizePanoramaStyle(String backgroundMode) {
-        if (backgroundMode == null || "panorama".equals(backgroundMode)) {
+        if (backgroundMode == null || "panorama".equals(backgroundMode) || "new".equals(backgroundMode)) {
             return DEFAULT_PANORAMA_STYLE;
         }
         return backgroundMode;
