@@ -47,7 +47,7 @@ public class GlobalListener {
 
     @Subscribe
     public void onValueChange(EventValueChange e) {
-        if (!FPSMaster.configManager.isLoadingConfig()) {
+        if (FPSMaster.configManager.isConfigLoaded() && !FPSMaster.configManager.isLoadingConfig()) {
             FPSMaster.configManager.saveConfigQuietly("default");
         }
     }

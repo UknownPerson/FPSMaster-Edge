@@ -3,6 +3,7 @@ package top.fpsmaster.ui.screens.oobe;
 import top.fpsmaster.FPSMaster;
 import top.fpsmaster.ui.common.control.UiControl;
 import top.fpsmaster.utils.math.anim.AnimClock;
+import top.fpsmaster.utils.math.anim.AnimMath;
 import top.fpsmaster.utils.math.anim.ColorAnimator;
 import top.fpsmaster.utils.render.draw.Hover;
 import top.fpsmaster.utils.render.draw.Rects;
@@ -22,6 +23,8 @@ public class OobeButton implements UiControl {
     private float height;
     private boolean primary;
     private boolean enabled = true;
+    private float hoverAnim;
+    private float pressAnim;
 
     public OobeButton(String text, boolean primary, Runnable onClick) {
         this.text = text;
@@ -51,15 +54,24 @@ public class OobeButton implements UiControl {
         this.y = y;
         this.width = width;
         this.height = height;
-        colorAnimator.update(clock.tick());
+        float dt = (float) clock.tick();
+        colorAnimator.update(dt);
         boolean hovered = enabled && Hover.is(x, y, width, height, (int) mouseX, (int) mouseY);
+        hoverAnim = (float) AnimMath.base(hoverAnim, hovered ? 1.0 : 0.0, 0.22);
+        pressAnim = (float) AnimMath.base(pressAnim, 0.0, 0.30);
         Color target = primary
                 ? (hovered ? new Color(118, 131, 252, 242) : new Color(104, 117, 247, enabled ? 228 : 148))
                 : (hovered ? new Color(255, 255, 255, 228) : new Color(255, 255, 255, enabled ? 188 : 145));
         colorAnimator.base(target);
-        Rects.rounded(Math.round(x), Math.round(y), Math.round(width), Math.round(height), 12, colorAnimator.getColor().getRGB());
+        float inset = pressAnim * 1.5f;
+        float drawX = x + inset;
+        float drawY = y + inset;
+        float drawWidth = Math.max(4f, width - inset * 2f);
+        float drawHeight = Math.max(4f, height - inset * 2f);
+        Color fillColor = colorAnimator.getColor();
+        Rects.rounded(Math.round(drawX), Math.round(drawY), Math.round(drawWidth), Math.round(drawHeight), 12, fillColor.getRGB());
         int textColor = primary ? Color.WHITE.getRGB() : new Color(42, 52, 78, enabled ? 255 : 160).getRGB();
-        FPSMaster.fontManager.s14.drawCenteredString(text, x + width / 2f, y + height / 2f - 3.5f, textColor);
+        FPSMaster.fontManager.s16.drawCenteredString(text, x + width / 2f, y + height / 2f - 4.5f + pressAnim * 0.5f, textColor);
     }
 
     @Override
@@ -77,6 +89,7 @@ public class OobeButton implements UiControl {
     @Override
     public void mouseClicked(float mouseX, float mouseY, int button) {
         if (button == 0 && enabled && Hover.is(x, y, width, height, (int) mouseX, (int) mouseY)) {
+            pressAnim = 1.0f;
             onClick.run();
         }
     }

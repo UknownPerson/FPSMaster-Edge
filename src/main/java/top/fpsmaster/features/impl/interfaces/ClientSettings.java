@@ -30,7 +30,7 @@ public class ClientSettings extends InterfaceModule {
     };
     public static ModeSetting fixedScale = new ModeSetting(
             "FixedScale",
-            5,
+            3,
             () -> fixedScaleEnabled.getValue(),
             "0.5x", "0.75x", "1x", "1.25x", "1.5x", "2x", "2.5x", "3x"
     );

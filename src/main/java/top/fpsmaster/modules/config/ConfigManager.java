@@ -36,11 +36,16 @@ public class ConfigManager {
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
     private static final int SCHEMA_VERSION = 1;
     private boolean loadingConfig;
+    private boolean configLoaded;
 
     public Configure configure = new Configure();
 
     public boolean isLoadingConfig() {
         return loadingConfig;
+    }
+
+    public boolean isConfigLoaded() {
+        return configLoaded;
     }
 
     public void saveConfigQuietly(String name) {
@@ -54,6 +59,7 @@ public class ConfigManager {
     }
 
     public void saveConfig(String name) throws FileException {
+        System.out.println("[ConfigManager] Saving config: " + name + ", oobeCompleted = " + configure.oobeCompleted);
         JsonObject json = new JsonObject();
         json.addProperty("schemaVersion", SCHEMA_VERSION);
         JsonObject client = new JsonObject();
@@ -186,6 +192,7 @@ public class ConfigManager {
                 configure.oobeCompleted = client.has("oobeCompleted")
                         ? client.get("oobeCompleted").getAsBoolean()
                         : FPSMaster.defaultConfigExistedBeforeLoad;
+                System.out.println("[ConfigManager] Loaded oobeCompleted = " + configure.oobeCompleted + " (has field: " + client.has("oobeCompleted") + ", defaultConfigExistedBeforeLoad: " + FPSMaster.defaultConfigExistedBeforeLoad + ")");
                 configure.antiCheatEnabled = !client.has("antiCheatEnabled") || client.get("antiCheatEnabled").getAsBoolean();
                 configure.anonymousDataEnabled = !client.has("anonymousDataEnabled") || client.get("anonymousDataEnabled").getAsBoolean();
                 if (client.has("classicBackgroundColor")) {
@@ -308,6 +315,7 @@ public class ConfigManager {
             }
         } finally {
             loadingConfig = false;
+            configLoaded = true;
         }
     }
 

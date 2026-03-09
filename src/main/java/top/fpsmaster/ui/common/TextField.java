@@ -450,7 +450,7 @@ public class TextField extends Gui {
             }
 
             boolean flag = j >= 0 && j <= s.length();
-            boolean isFocus = this.isFocused && this.cursorCounter / 6 % 2 == 0 && flag;
+            boolean isFocus = this.isFocused && (System.currentTimeMillis() / 500L) % 2L == 0L && flag;
             float l = this.xPosition + 4;
             float i1 = this.yPosition + (this.height - 8) / 2;
             float j1 = l;
