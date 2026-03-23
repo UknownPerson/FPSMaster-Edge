@@ -37,10 +37,12 @@ import java.net.URI;
 public class OobeScreen extends ScaledGuiScreen {
     private static final int PAGE_COUNT = 8;
     private static final String[] SCALE_LABELS = new String[]{"0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x", "2.5x", "3.0x"};
-    private static final String[] GREETINGS = new String[]{"Hello, welcome.", "你好，欢迎使用。", "Nice to see you.", "很高兴见到你。", "Let's set things up.", "现在开始进行初始设置。"};
+    private static final String[] GREETINGS = new String[]{"Hello, welcome.", "你好，欢迎使用。", "こんにちは、ようこそ。"};
     private static final ResourceLocation PREVIEW_IMAGE = new ResourceLocation("client/background/panorama_1/panorama_0.png");
     private static final ResourceLocation PANORAMA_THREE = new ResourceLocation("client/background/panorama_3/panorama_0.png");
     private static final long TUTORIAL_SLIDE_DURATION_MS = 3000L;
+    private static final long OOBE_INTRO_DURATION_MS = 3000L;
+    private static final long GREETING_ROTATE_DURATION_MS = 2200L;
     private static boolean sessionStateInitialized;
     private static int savedPage;
     private static int savedLanguageValue;
@@ -89,6 +91,12 @@ public class OobeScreen extends ScaledGuiScreen {
     private boolean tutorialPlaybackComplete;
     private float tutorialSlideTransition;
     private int tutorialPrevSlide;
+    private long introStartedAt;
+    private float introProgress = 1f;
+    private float greetingTransition = 1f;
+    private String greetingCurrentText = "";
+    private String greetingPreviousText = "";
+    private int greetingIndex;
 
     private TextField accountField;
     private TextField passwordField;
@@ -106,6 +114,9 @@ public class OobeScreen extends ScaledGuiScreen {
     public void initGui() {
         super.initGui();
         animClock.reset();
+        introStartedAt = System.currentTimeMillis();
+        introProgress = 0f;
+        greetingIndex = (int) ((System.currentTimeMillis() / GREETING_ROTATE_DURATION_MS) % GREETINGS.length);
 
         backButton = new OobeButton("Back", false, () -> {
             if (page > 0) {
@@ -127,6 +138,9 @@ public class OobeScreen extends ScaledGuiScreen {
         restoreSessionState();
 
         setPreviewLanguage(languageValue);
+        greetingCurrentText = animatedGreeting();
+        greetingPreviousText = greetingCurrentText;
+        greetingTransition = 1f;
         scaleDropdown.setItems(SCALE_LABELS).setSelectedIndex(fixedScaleIndex).setEnabled(fixedScaleEnabled);
 
         accountField = new TextField(FPSMaster.fontManager.s18, key("oobe.login.account.placeholder"),
@@ -144,6 +158,11 @@ public class OobeScreen extends ScaledGuiScreen {
         updateTutorialAutoplay();
 
         renderBackground();
+        float introEased = easeOutCubic(introProgress);
+        float introOffsetY = (1f - introEased) * 22f;
+
+        GL11.glPushMatrix();
+        GL11.glTranslatef(0f, introOffsetY, 0f);
         renderTopbar();
 
         GL11.glPushMatrix();
@@ -179,7 +198,9 @@ public class OobeScreen extends ScaledGuiScreen {
         GL11.glPopMatrix();
 
         renderFooter(mouseX, mouseY);
+        GL11.glPopMatrix();
         renderShaderDialogs(mouseX, mouseY);
+        renderIntroOverlay();
         syncSessionState();
     }
 
@@ -196,6 +217,22 @@ public class OobeScreen extends ScaledGuiScreen {
         registerHoverAnim = (float) AnimMath.base(registerHoverAnim, 0.0, 0.25);
         pageMotion += (0f - pageMotion) * Math.min(1f, dt * 8.5f);
         tutorialSlideTransition += (1f - tutorialSlideTransition) * Math.min(1f, dt * 8f);
+        float introTarget = Math.min(1f, Math.max(0f, (System.currentTimeMillis() - introStartedAt) / (float) OOBE_INTRO_DURATION_MS));
+        introProgress += (introTarget - introProgress) * Math.min(1f, dt * 4f);
+        int nextGreetingIndex = (int) ((System.currentTimeMillis() / GREETING_ROTATE_DURATION_MS) % GREETINGS.length);
+        if (nextGreetingIndex != greetingIndex) {
+            greetingPreviousText = greetingCurrentText;
+            greetingIndex = nextGreetingIndex;
+            greetingCurrentText = animatedGreeting();
+            greetingTransition = 0f;
+        }
+        if (greetingTransition < 1f) {
+            greetingTransition += (1f - greetingTransition) * Math.min(1f, dt * 7f);
+            if (greetingTransition > 0.995f) {
+                greetingTransition = 1f;
+                greetingPreviousText = greetingCurrentText;
+            }
+        }
         accountField.updateCursorCounter();
         passwordField.updateCursorCounter();
     }
@@ -208,13 +245,21 @@ public class OobeScreen extends ScaledGuiScreen {
         // Intentionally left blank: OOBE no longer uses a top header area.
     }
 
+    private void renderIntroOverlay() {
+        float eased = easeOutCubic(introProgress);
+        int overlayAlpha = Math.min(255, Math.max(0, Math.round((1f - eased) * 255f)));
+        if (overlayAlpha > 0) {
+            Rects.fill(0f, 0f, guiWidth, guiHeight, new Color(244, 247, 255, overlayAlpha));
+        }
+    }
+
     private void renderLanguagePage() {
         float titleWidth = clamp(contentWidth() * 0.6f, 280f, 660f);
         float x = centeredColumnX(titleWidth);
         float y = contentTop() + 22f;
 
         renderStepCounter(x, y - 30f);
-        FPSMaster.fontManager.s18.drawString(animatedGreeting(), x, y - 2f, accentText().getRGB());
+        renderAnimatedGreeting(x, y - 2f);
         drawResponsiveTitle(key("oobe.language.title"), x, y + 28f);
         drawBodyText(key("oobe.language.desc"), x, y + 76f, titleWidth);
 
@@ -225,14 +270,10 @@ public class OobeScreen extends ScaledGuiScreen {
         renderChip(x + chipW + 12f, chipY, chipW, chipH, languageValue == 0, "English");
 
         if (consumePressInBounds(x, chipY, chipW, chipH, 0) != null) {
-            languageValue = 1;
-            setPreviewLanguage(languageValue);
-            updateTextFieldPlaceholders();
+            switchLanguage(1);
         }
         if (consumePressInBounds(x + chipW + 12f, chipY, chipW, chipH, 0) != null) {
-            languageValue = 0;
-            setPreviewLanguage(languageValue);
-            updateTextFieldPlaceholders();
+            switchLanguage(0);
         }
     }
 
@@ -664,7 +705,31 @@ public class OobeScreen extends ScaledGuiScreen {
     }
 
     private String animatedGreeting() {
-        return GREETINGS[(int) ((System.currentTimeMillis() / 1600L) % GREETINGS.length)];
+        return GREETINGS[greetingIndex];
+    }
+
+    private void renderAnimatedGreeting(float x, float y) {
+        float eased = easeOutCubic(greetingTransition);
+        int currentAlpha = Math.min(255, Math.max(0, Math.round(eased * 255f)));
+        Color currentColor = new Color(accentText().getRed(), accentText().getGreen(), accentText().getBlue(), currentAlpha);
+
+        if (greetingTransition < 1f && greetingPreviousText != null && !greetingPreviousText.isEmpty()) {
+            float previousProgress = 1f - eased;
+            int previousAlpha = Math.min(255, Math.max(0, Math.round(previousProgress * 255f)));
+            Color previousColor = new Color(accentText().getRed(), accentText().getGreen(), accentText().getBlue(), previousAlpha);
+            FPSMaster.fontManager.s18.drawString(greetingPreviousText, x, y - eased * 8f, previousColor.getRGB());
+        }
+
+        FPSMaster.fontManager.s18.drawString(greetingCurrentText, x, y + (1f - eased) * 8f, currentColor.getRGB());
+    }
+
+    private void switchLanguage(int newLanguage) {
+        if (languageValue == newLanguage) {
+            return;
+        }
+        languageValue = newLanguage;
+        setPreviewLanguage(languageValue);
+        updateTextFieldPlaceholders();
     }
 
     private String getNextLabel() {
@@ -1163,6 +1228,12 @@ public class OobeScreen extends ScaledGuiScreen {
         int b = (int) (from.getBlue() + (to.getBlue() - from.getBlue()) * clamped);
         int a = (int) (from.getAlpha() + (to.getAlpha() - from.getAlpha()) * clamped);
         return new Color(r, g, b, a);
+    }
+
+    private float easeOutCubic(float progress) {
+        float clamped = Math.max(0f, Math.min(1f, progress));
+        float inverse = 1f - clamped;
+        return 1f - inverse * inverse * inverse;
     }
 
     private void openLink(String url) {
