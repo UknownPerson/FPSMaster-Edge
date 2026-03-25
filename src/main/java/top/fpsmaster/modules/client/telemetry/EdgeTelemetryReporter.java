@@ -27,6 +27,7 @@ public class EdgeTelemetryReporter {
     private static final long PRESENCE_INTERVAL_MS = 180_000L;
     private static final String TELEMETRY_URL = "https://api.fpsmaster.top/api/v1/telemetry/heartbeat";
     private static final String PRESENCE_URL = "https://api.fpsmaster.top/api/v1/telemetry/presence";
+    private static final String OFFLINE_URL = "https://api.fpsmaster.top/api/v1/telemetry/offline";
     private static final String CLIENT_NAME = "FPSMaster-Edge";
     private static final int MAX_SAMPLED_PLAYERS = 8;
 
@@ -45,6 +46,11 @@ public class EdgeTelemetryReporter {
 
         boolean activeNow = isRemoteMultiplayerActive();
         if (!activeNow) {
+            if (multiplayerActive) {
+                multiplayerActive = false;
+                submitOffline(false);
+                clearState();
+            }
             multiplayerActive = false;
             return;
         }
@@ -66,6 +72,9 @@ public class EdgeTelemetryReporter {
     }
 
     public void shutdown() {
+        if (multiplayerActive) {
+            submitOffline(true);
+        }
         clearState();
     }
 
@@ -124,6 +133,30 @@ public class EdgeTelemetryReporter {
         });
     }
 
+    private void submitOffline(boolean blocking) {
+        JsonObject payload = buildOfflinePayload();
+        if (payload == null) {
+            return;
+        }
+
+        Runnable request = () -> {
+            try {
+                HttpRequest.HttpResponseResult response = HttpRequest.postJson(OFFLINE_URL, payload);
+                if (!response.isSuccess()) {
+                    ClientLogger.warn("Edge offline failed with status " + response.getStatusCode());
+                }
+            } catch (IOException exception) {
+                ClientLogger.warn("Edge offline failed: " + exception.getMessage());
+            }
+        };
+
+        if (blocking) {
+            request.run();
+            return;
+        }
+        FPSMaster.async.runnable(request);
+    }
+
     private JsonObject buildHeartbeatPayload() {
         Configure configure = FPSMaster.configManager.configure;
         if (configure == null) {
@@ -179,6 +212,24 @@ public class EdgeTelemetryReporter {
         payload.addProperty("sampledPlayersPayload", snapshot.sampledPlayersPayload);
         payload.addProperty("payloadJson", snapshot.payloadJson);
         payload.addProperty("clientVersion", FPSMaster.CLIENT_VERSION);
+        return payload;
+    }
+
+    private JsonObject buildOfflinePayload() {
+        Configure configure = FPSMaster.configManager.configure;
+        if (configure == null) {
+            return null;
+        }
+
+        String sessionId = normalize(configure.telemetryInstanceId);
+        if (sessionId == null) {
+            return null;
+        }
+
+        JsonObject payload = new JsonObject();
+        payload.addProperty("clientName", CLIENT_NAME);
+        payload.addProperty("clientKind", FPSMaster.EDITION.toUpperCase(Locale.ROOT));
+        payload.addProperty("sessionId", sessionId);
         return payload;
     }
 
