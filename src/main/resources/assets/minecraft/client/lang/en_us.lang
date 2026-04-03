@@ -119,6 +119,7 @@ oobe.login.forgot=Forgot password
 oobe.login.register=Create account
 oobe.login.submit=Sign in
 oobe.login.skip=Skip
+oobe.login.success=Login Successful
 oobe.options.step=Step 6
 oobe.options.cover.title=Client options
 oobe.options.cover.desc=Choose your security and anonymous data preferences here.

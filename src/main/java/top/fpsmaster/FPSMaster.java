@@ -7,6 +7,7 @@ import top.fpsmaster.features.command.CommandManager;
 import top.fpsmaster.features.impl.interfaces.ClientSettings;
 import top.fpsmaster.features.manager.ModuleManager;
 import top.fpsmaster.font.FontManager;
+import top.fpsmaster.modules.client.api.AuthService;
 import top.fpsmaster.modules.client.thread.ClientThreadPool;
 import top.fpsmaster.modules.client.telemetry.EdgeTelemetryReporter;
 import top.fpsmaster.modules.config.ConfigManager;
@@ -64,6 +65,11 @@ public class FPSMaster {
         return CLIENT_NAME + " " + EDITION + " (" + GitInfo.getBranch() + " - " + GitInfo.getCommitIdAbbrev() + ")" + (development ? " - dev" : "");
     }
 
+    private void initializeAuth() {
+        ClientLogger.info("Initializing Auth Service...");
+        AuthService.getInstance().initialize();
+    }
+
     private void initializeFonts() {
         ClientLogger.info("Initializing Fonts...");
 
@@ -117,6 +123,7 @@ public class FPSMaster {
     public void initialize() {
         try {
             FileUtils.init(mc.mcDataDir);
+            initializeAuth();  // Initialize auth service early to check for launcher tokens
             initializeFonts();
             initializeModules();
             initializeComponents();

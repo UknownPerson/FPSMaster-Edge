@@ -195,7 +195,8 @@ public class ConfigManager {
                         ? client.get("oobeCompleted").getAsBoolean()
                         : FPSMaster.defaultConfigExistedBeforeLoad;
                 configure.antiCheatEnabled = !client.has("antiCheatEnabled") || client.get("antiCheatEnabled").getAsBoolean();
-                configure.anonymousDataEnabled = !client.has("anonymousDataEnabled") || client.get("anonymousDataEnabled").getAsBoolean();
+                // Telemetry defaults to false (opt-in for privacy compliance)
+                configure.anonymousDataEnabled = client.has("anonymousDataEnabled") && client.get("anonymousDataEnabled").getAsBoolean();
                 configure.telemetryInstanceId = client.has("telemetryInstanceId")
                         ? client.get("telemetryInstanceId").getAsString()
                         : UUID.randomUUID().toString();

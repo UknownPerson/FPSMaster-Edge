@@ -21,6 +21,10 @@ import top.fpsmaster.features.impl.render.ItemPhysics;
 import top.fpsmaster.features.manager.Module;
 import top.fpsmaster.ui.common.TextField;
 import top.fpsmaster.ui.screens.mainmenu.MainMenu;
+import top.fpsmaster.modules.client.api.FPSMasterApiClient;
+import top.fpsmaster.modules.client.api.model.LoginResponse;
+import top.fpsmaster.modules.client.api.model.ApiResponse;
+import top.fpsmaster.modules.logger.ClientLogger;
 import top.fpsmaster.utils.math.anim.AnimClock;
 import top.fpsmaster.utils.math.anim.AnimMath;
 import top.fpsmaster.utils.render.draw.Hover;
@@ -55,6 +59,11 @@ public class OobeScreen extends ScaledGuiScreen {
     private static final int[] savedQaAnswers = new int[]{-1, -1, -1};
     private static String savedBackgroundChoice;
     private static boolean savedLoginSkipped = true;
+    private static boolean savedIsLoggingIn = false;
+    private static String savedLoginError = null;
+    private static boolean savedLoginWelcomeShown = false;
+    private static String savedWelcomeUsername = null;
+    private static int savedWelcomeUserLevel = 0;
     private static int savedFeatureCount = 5;
     private static String savedAccountText = "";
     private static String savedPasswordText = "";
@@ -71,6 +80,8 @@ public class OobeScreen extends ScaledGuiScreen {
     private int fixedScaleIndex;
     private int tutorialIndex;
     private int hoveredFeature = -1;
+    private int expandedFeatureCard = -1;
+    private float featureDetailExpand = 0f;
     private boolean antiCheatEnabled;
     private boolean anonymousDataEnabled;
     private boolean enterGuide = true;
@@ -78,6 +89,12 @@ public class OobeScreen extends ScaledGuiScreen {
     private final int[] qaAnswers = new int[]{-1, -1, -1};
     private String backgroundChoice;
     private boolean loginSkipped = true;
+    private boolean isLoggingIn = false;
+    private String loginError = null;
+    private boolean loginWelcomeShown = false;
+    private String welcomeUsername = null;
+    private int welcomeUserLevel = 0;
+    private String loginSuccessMessage = null;
     private float pageMotion;
     private int pageMotionDirection = 1;
     private int featureCount = 5;
@@ -85,7 +102,19 @@ public class OobeScreen extends ScaledGuiScreen {
     private String pendingBackgroundChoice;
     private boolean shaderWarningDialogVisible;
     private boolean shaderUnsupportedDialogVisible;
+    private boolean shaderBenchmarkConfirmDialogVisible;
+    private boolean shaderBenchmarkRunningDialogVisible;
+    private boolean shaderBenchmarkResultDialogVisible;
     private double shaderBenchmarkScore;
+    private float shaderBenchmarkProgress;
+    private long shaderBenchmarkStartTime;
+
+    // Benchmark state for frame-based execution
+    private boolean benchmarkWarmupComplete;
+    private int benchmarkProgramId;
+    private long benchmarkElapsedNs;
+    private int benchmarkIterations;
+    private long benchmarkStartTime;
     private float forgotHoverAnim;
     private float registerHoverAnim;
     private boolean tutorialPlaybackComplete;
@@ -97,6 +126,7 @@ public class OobeScreen extends ScaledGuiScreen {
     private String greetingCurrentText = "";
     private String greetingPreviousText = "";
     private int greetingIndex;
+    private boolean canGoBackQa = false;
 
     private TextField accountField;
     private TextField passwordField;
@@ -109,6 +139,10 @@ public class OobeScreen extends ScaledGuiScreen {
     private OobeButton shaderContinueButton;
     private OobeButton shaderCancelButton;
     private OobeButton shaderUnsupportedOkButton;
+    private OobeButton shaderBenchmarkConfirmYesButton;
+    private OobeButton shaderBenchmarkConfirmNoButton;
+    private OobeButton shaderBenchmarkConfirmSkipButton;
+    private OobeButton shaderBenchmarkResultOkButton;
 
     @Override
     public void initGui() {
@@ -128,11 +162,19 @@ public class OobeScreen extends ScaledGuiScreen {
         nextButton = new OobeButton("Next", true, this::onNext);
         tutorialPrevButton = new OobeButton("Prev", false, () -> tutorialIndex = (tutorialIndex + 2) % 3);
         tutorialNextButton = new OobeButton("Next", true, () -> tutorialIndex = (tutorialIndex + 1) % 3);
-        loginButton = new OobeButton("Sign in", false, () -> loginSkipped = false);
-        skipLoginButton = new OobeButton("Skip", true, () -> loginSkipped = true);
+        loginButton = new OobeButton("Sign in", false, this::performLogin);
+        skipLoginButton = new OobeButton("Skip", true, () -> {
+            loginSkipped = true;
+            loginError = null;
+            onNext();
+        });
         shaderContinueButton = new OobeButton("Continue", true, this::confirmShaderBackgroundSelection);
         shaderCancelButton = new OobeButton("Cancel", false, this::cancelShaderBackgroundSelection);
         shaderUnsupportedOkButton = new OobeButton("OK", true, () -> shaderUnsupportedDialogVisible = false);
+        shaderBenchmarkConfirmYesButton = new OobeButton("Run Test", true, this::startShaderBenchmark);
+        shaderBenchmarkConfirmNoButton = new OobeButton("Enable Anyway", false, this::enableShaderWithoutBenchmark);
+        shaderBenchmarkConfirmSkipButton = new OobeButton("Skip", true, this::cancelShaderBackgroundSelection);
+        shaderBenchmarkResultOkButton = new OobeButton("OK", true, this::confirmShaderBenchmarkResult);
 
         initSessionStateIfNeeded();
         restoreSessionState();
@@ -207,9 +249,11 @@ public class OobeScreen extends ScaledGuiScreen {
     private void updateAnimations(float dt) {
         float speed = Math.min(1f, dt * 6f);
         for (int i = 0; i < featureExpand.length; i++) {
-            float target = hoveredFeature == i ? 1f : 0f;
+            float target = (hoveredFeature == i && expandedFeatureCard == -1) ? 1f : 0f;
             featureExpand[i] += (target - featureExpand[i]) * speed;
         }
+        float detailTarget = expandedFeatureCard >= 0 ? 1f : 0f;
+        featureDetailExpand += (detailTarget - featureDetailExpand) * Math.min(1f, dt * 6f);
         for (int i = 0; i < qaOptionHover.length; i++) {
             qaOptionPress[i] = (float) AnimMath.base(qaOptionPress[i], 0.0, 0.25);
         }
@@ -359,16 +403,29 @@ public class OobeScreen extends ScaledGuiScreen {
         drawResponsiveTitle(key("oobe.features.title"), x, y + 20f);
         drawBodyText(key("oobe.features.desc"), x, y + 66f, layoutWidth * 0.72f);
 
+        // If a card is expanded, show the detail view
+        if (expandedFeatureCard >= 0 && featureDetailExpand > 0.01f) {
+            renderFeatureDetailView(x, y + 94f, layoutWidth, cards[expandedFeatureCard], expandedFeatureCard);
+            // Show "Back to overview" button
+            float backY = y + 94f + clamp(layoutWidth * 0.4f, 180f, 240f) + 12f;
+            if (renderSmallButton(x, backY, 100f, 28f, isChinese() ? "返回概览" : "Back")) {
+                expandedFeatureCard = -1;
+            }
+            return;
+        }
+
         hoveredFeature = -1;
+        float baseCardY = y + 94f;
+
         for (int i = 0; i < cards.length; i++) {
             int row = i / 2;
             int column = i % 2;
             float cardX = x + column * (cardWidth + gap);
-            float cardY = y + 94f + row * (collapsedHeight + rowSpacing);
+            float cardY = baseCardY + row * (collapsedHeight + rowSpacing);
             float detailHeight = clamp(18f * featureExpand[i], 0f, 18f);
             float totalHeight = collapsedHeight + detailHeight;
             boolean hovered = Hover.is(cardX, cardY, cardWidth, totalHeight, getMouseX(), getMouseY());
-            if (hovered) {
+            if (hovered && expandedFeatureCard == -1) {
                 hoveredFeature = i;
             }
 
@@ -378,34 +435,114 @@ public class OobeScreen extends ScaledGuiScreen {
             FPSMaster.fontManager.s18.drawString(cards[i][0], cardX + 16f, cardY + 16f, panelTitleText().getRGB());
             drawBodyText(cards[i][1], cardX + 16f, cardY + 40f, cardWidth - 32f);
 
+            // Show small detail preview on hover
             if (featureExpand[i] > 0.02f) {
                 int alpha = Math.min(255, Math.max(0, (int) (featureExpand[i] * 255f)));
                 Rects.fill(cardX + 16f, cardY + 62f, cardWidth - 32f, 1f, new Color(27, 35, 48, Math.max(18, alpha / 8)));
                 FPSMaster.fontManager.s16.drawString(cards[i][2], cardX + 16f, cardY + 66f,
                         new Color(102, 111, 128, alpha).getRGB());
             }
+
+            // Click to expand
+            if (!hasActiveModal() && consumePressInBounds(cardX, cardY, cardWidth, totalHeight, 0) != null) {
+                expandedFeatureCard = i;
+            }
         }
     }
 
+    private void renderFeatureDetailView(float x, float y, float width, String[] cardData, int featureIndex) {
+        float detailHeight = clamp(width * 0.4f, 180f, 240f);
+        float imageWidth = width * 0.45f;
+        float textWidth = width - imageWidth - 20f;
+
+        // Dimmed background
+        Rects.fill(0f, 0f, guiWidth, guiHeight, new Color(244, 247, 255, 180));
+
+        // Main detail card
+        drawGlassCard(x, y, width, detailHeight, 24f,
+                new Color(255, 255, 255, 244),
+                new Color(218, 226, 243, 200));
+
+        // Title
+        drawPanelTitle(cardData[0], x + 24f, y + 24f);
+
+        // Description on left
+        float textX = x + 24f;
+        float textY = y + 60f;
+        drawBodyText(cardData[1], textX, textY, textWidth - 24f);
+        Rects.fill(textX, textY + 40f, textWidth - 24f, 1f, new Color(229, 235, 247, 200));
+        textY += 50f;
+        drawMultilineBodyText(cardData[2], textX, textY, textWidth - 24f, 6);
+
+        // Image placeholder on right
+        float imageX = x + width - imageWidth - 24f;
+        float imageY = y + 24f;
+        float imageHeight = detailHeight - 48f;
+        Rects.rounded(Math.round(imageX), Math.round(imageY), Math.round(imageWidth), Math.round(imageHeight), 16,
+                new Color(229, 235, 247, 150));
+        // Draw placeholder icon/text
+        String placeholderText = isChinese() ? "功能预览图" : "Preview";
+        FPSMaster.fontManager.s24.drawCenteredString(placeholderText, imageX + imageWidth / 2f, imageY + imageHeight / 2f - 8f,
+                new Color(150, 160, 180).getRGB());
+    }
+
+    private boolean renderSmallButton(float x, float y, float width, float height, String text) {
+        int mouseX = getMouseX();
+        int mouseY = getMouseY();
+        boolean hovered = Hover.is(x, y, width, height, mouseX, mouseY);
+
+        Rects.rounded(Math.round(x), Math.round(y), Math.round(width), Math.round(height), 14,
+                hovered ? new Color(104, 117, 247, 236) : new Color(229, 235, 247, 200));
+        FPSMaster.fontManager.s16.drawCenteredString(text, x + width / 2f, y + height / 2f - 5f,
+                hovered ? Color.WHITE.getRGB() : new Color(82, 100, 142).getRGB());
+
+        return hovered && consumePressInBounds(x, y, width, height, 0) != null;
+    }
+
     private void renderLoginPage(int mouseX, int mouseY) {
-        float width = clamp(contentWidth() * 0.44f, 280f, 360f);
+        float width = clamp(contentWidth() * 0.52f, 340f, 420f);
         float x = centeredColumnX(width);
         float y = contentTop() + 8f;
         boolean tightHeight = availableContentHeight() < 270f;
 
         renderStepCounter(x, y - 14f);
+
+        // Show welcome screen if login was successful
+        if (loginWelcomeShown && welcomeUsername != null) {
+            renderLoginWelcomeScreen(x, y, width, mouseX, mouseY);
+            return;
+        }
+
         drawResponsiveTitle(key("oobe.login.title"), x, y + 14f);
         drawBodyText(key("oobe.login.desc"), x, y + 60f, width);
 
         float fieldY = y + (tightHeight ? 86f : 96f);
+
+        // Disable input while logging in
+        boolean inputEnabled = !isLoggingIn;
+        accountField.setEnabled(inputEnabled);
+        passwordField.setEnabled(inputEnabled);
+
         drawTextField(accountField, x, fieldY, width, 34f);
         drawTextField(passwordField, x, fieldY + 46f, width, 34f);
+
+        // Calculate positions - error message above links
+        float errorY = fieldY + 88f;
+        float errorHeight = loginError != null ? 24f : 0f;
+        float linksY = errorY + errorHeight + 8f;
+
+        // Show error message if login failed
+        if (loginError != null) {
+            Rects.rounded(Math.round(x), Math.round(errorY), Math.round(width), 24f, 12,
+                    new Color(255, 120, 120, 40).getRGB());
+            FPSMaster.fontManager.s16.drawString(loginError, x + 12f, errorY + 8f,
+                    new Color(220, 60, 60).getRGB());
+        }
 
         String forgot = key("oobe.login.forgot");
         String register = key("oobe.login.register");
         float forgotX = x;
         float registerX = x + 132f;
-        float linksY = fieldY + 96f;
         boolean forgotHovered = Hover.is(forgotX, linksY - 2f, FPSMaster.fontManager.s18.getStringWidth(forgot), 18f, mouseX, mouseY);
         boolean registerHovered = Hover.is(registerX, linksY - 2f, FPSMaster.fontManager.s18.getStringWidth(register), 18f, mouseX, mouseY);
         forgotHoverAnim = (float) AnimMath.base(forgotHoverAnim, forgotHovered ? 1.0 : 0.0, 0.24);
@@ -414,16 +551,142 @@ public class OobeScreen extends ScaledGuiScreen {
                 blendColor(accentText(), new Color(82, 100, 142), forgotHoverAnim).getRGB());
         FPSMaster.fontManager.s18.drawString(register, registerX, linksY,
                 blendColor(accentText(), new Color(82, 100, 142), registerHoverAnim).getRGB());
-        if (!hasActiveModal() && consumePressInBounds(forgotX, linksY - 2f, FPSMaster.fontManager.s18.getStringWidth(forgot), 18f, 0) != null) {
+        if (!hasActiveModal() && !isLoggingIn && consumePressInBounds(forgotX, linksY - 2f, FPSMaster.fontManager.s18.getStringWidth(forgot), 18f, 0) != null) {
             openLink("https://fpsmaster.top/forgot");
         }
-        if (!hasActiveModal() && consumePressInBounds(registerX, linksY - 2f, FPSMaster.fontManager.s18.getStringWidth(register), 18f, 0) != null) {
+        if (!hasActiveModal() && !isLoggingIn && consumePressInBounds(registerX, linksY - 2f, FPSMaster.fontManager.s18.getStringWidth(register), 18f, 0) != null) {
             openLink("https://fpsmaster.top/login");
         }
 
-        float buttonY = fieldY + 130f;
-        loginButton.setText(key("oobe.login.submit")).setPrimary(!loginSkipped).renderInScreen(this, x, buttonY, 82f, 28f, mouseX, mouseY);
-        skipLoginButton.setText(key("oobe.login.skip")).setPrimary(loginSkipped).renderInScreen(this, x + 92f, buttonY, 82f, 28f, mouseX, mouseY);
+        // Adjust button Y based on whether error is shown
+        float buttonY = linksY + 30f;
+        String loginButtonText = isLoggingIn ? (isChinese() ? "登录中..." : "Logging in...") : key("oobe.login.submit");
+        loginButton.setText(loginButtonText).setPrimary(!loginSkipped).setEnabled(!isLoggingIn)
+                .renderInScreen(this, x, buttonY, 82f, 28f, mouseX, mouseY);
+        skipLoginButton.setText(key("oobe.login.skip")).setPrimary(loginSkipped).setEnabled(!isLoggingIn)
+                .renderInScreen(this, x + 92f, buttonY, 82f, 28f, mouseX, mouseY);
+    }
+
+    private void renderLoginWelcomeScreen(float x, float y, float width, int mouseX, int mouseY) {
+        // Calculate card height to fit within available space
+        float availableHeight = contentBottom() - y - footerHeight() - 70f;
+        float cardHeight = clamp(availableHeight, 220f, 320f);
+        float cardY = y + 60f;
+
+        // Adjust width for smaller screens
+        float actualWidth = compactLayout() ? clamp(width, 280f, 360f) : width;
+
+        // Draw welcome card
+        drawGlassCard(x, cardY, actualWidth, cardHeight, 24f,
+                new Color(255, 255, 255, 248),
+                new Color(218, 226, 243, 180));
+
+        float centerX = x + actualWidth / 2f;
+
+        // Success icon/checkmark - scale with card size
+        float checkSize = clamp(cardHeight * 0.15f, 36f, 48f);
+        float checkX = centerX - checkSize / 2f;
+        float checkY = cardY + clamp(cardHeight * 0.1f, 24f, 32f);
+        Rects.rounded(Math.round(checkX), Math.round(checkY), Math.round(checkSize), Math.round(checkSize), 24,
+                new Color(104, 117, 247, 200).getRGB());
+        float checkFontSize = clamp(cardHeight * 0.11f, 28f, 36f);
+        drawCenteredStringScaled("✓", checkX + checkSize / 2f, checkY + checkSize / 2f, checkFontSize,
+                Color.WHITE.getRGB());
+
+        // Welcome title - responsive font size
+        float titleY = checkY + checkSize + clamp(cardHeight * 0.18f, 20f, 28f);
+        String welcomeTitle = isChinese() ? "登录成功" : "Login Successful";
+        if (actualWidth < 320f) {
+            FPSMaster.fontManager.s24.drawCenteredString(welcomeTitle, centerX, titleY - 8f,
+                    new Color(27, 35, 48).getRGB());
+        } else {
+            FPSMaster.fontManager.s28.drawCenteredString(welcomeTitle, centerX, titleY - 10f,
+                    new Color(27, 35, 48).getRGB());
+        }
+
+        // Username
+        float userY = titleY + clamp(cardHeight * 0.12f, 26f, 34f);
+        String welcomeUserText = isChinese()
+                ? "欢迎回来, " + welcomeUsername + "!"
+                : "Welcome back, " + welcomeUsername + "!";
+        FPSMaster.fontManager.s18.drawCenteredString(welcomeUserText, centerX, userY,
+                new Color(82, 100, 142).getRGB());
+
+        // User level info (if available)
+        float levelY = userY + 22f;
+        if (welcomeUserLevel > 0) {
+            String levelText = isChinese()
+                    ? "等级: " + welcomeUserLevel
+                    : "Level: " + welcomeUserLevel;
+            FPSMaster.fontManager.s16.drawCenteredString(levelText, centerX, levelY,
+                    new Color(134, 142, 156).getRGB());
+        }
+
+        // Divider
+        float dividerY = levelY + (welcomeUserLevel > 0 ? 28f : 24f);
+        Rects.fill(x + 40f, dividerY, actualWidth - 80f, 1f, new Color(229, 235, 247, 180).getRGB());
+
+        // Info text - positioned to avoid overlap with footer
+        float infoY = dividerY + 16f;
+        String infoText = isChinese()
+                ? "您现在可以继续完成客户端配置"
+                : "You can continue with the client setup";
+        FPSMaster.fontManager.s16.drawCenteredString(infoText, centerX, infoY,
+                new Color(134, 142, 156).getRGB());
+
+        // Note: User clicks the "Next" button in the footer to continue
+    }
+
+    private void drawCenteredStringScaled(String text, float x, float y, float fontSize, int color) {
+        // Draw centered text with specific font size
+        if (fontSize >= 36f) {
+            FPSMaster.fontManager.s36.drawCenteredString(text, x, y - 12f, color);
+        } else if (fontSize >= 28f) {
+            FPSMaster.fontManager.s28.drawCenteredString(text, x, y - 10f, color);
+        } else if (fontSize >= 24f) {
+            FPSMaster.fontManager.s24.drawCenteredString(text, x, y - 8f, color);
+        } else {
+            FPSMaster.fontManager.s18.drawCenteredString(text, x, y - 5f, color);
+        }
+    }
+
+    private void performLogin() {
+        if (isLoggingIn) {
+            return;
+        }
+
+        String username = accountField.getText().trim();
+        String password = passwordField.getText().trim();
+
+        if (username.isEmpty() || password.isEmpty()) {
+            loginError = isChinese() ? "请输入账号和密码" : "Please enter username and password";
+            return;
+        }
+
+        isLoggingIn = true;
+        loginError = null;
+
+        FPSMasterApiClient.getInstance().login(username, password, response -> {
+            isLoggingIn = false;
+
+            if (response.isSuccess() && response.getData() != null) {
+                LoginResponse loginResponse = response.getData();
+                loginSkipped = false;
+                loginWelcomeShown = true;
+                welcomeUsername = loginResponse.getCurrentUserView() != null
+                        ? loginResponse.getCurrentUserView().getUsername()
+                        : username;
+                welcomeUserLevel = loginResponse.getCurrentUserView() != null
+                        ? loginResponse.getCurrentUserView().getLevel()
+                        : 0;
+                ClientLogger.info("Login successful: " + loginResponse);
+            } else {
+                loginError = response.getMessage() != null && !response.getMessage().isEmpty()
+                        ? response.getMessage()
+                        : (isChinese() ? "登录失败，请重试" : "Login failed, please try again");
+                ClientLogger.warn("Login failed: " + loginError);
+            }
+        });
     }
 
     private void renderOptionsPage() {
@@ -498,6 +761,21 @@ public class OobeScreen extends ScaledGuiScreen {
         drawGlassCard(x, cardY, cardWidth, qaHeight, 22f, new Color(255, 255, 255, 232), new Color(229, 235, 247, 210));
         FPSMaster.fontManager.s16.drawString((qaStep + 1) + " / " + questions.length, x + 18f, cardY + 16f, mutedText().getRGB());
         drawPanelTitle(questions[qaStep][0], x + 18f, cardY + 44f);
+
+        // Add back button for previous question
+        if (qaStep > 0) {
+            String backLabel = isChinese() ? "← 上一题" : "← Back";
+            float backX = x + cardWidth - FPSMaster.fontManager.s18.getStringWidth(backLabel) - 20f;
+            float backY = cardY + 16f;
+            boolean backHovered = Hover.is(backX - 8f, backY - 2f, FPSMaster.fontManager.s18.getStringWidth(backLabel) + 16f, 20f, getMouseX(), getMouseY());
+            FPSMaster.fontManager.s18.drawString(backLabel, backX, backY,
+                    backHovered ? new Color(104, 117, 247).getRGB() : accentText().getRGB());
+            if (backHovered && !hasActiveModal() && consumePressInBounds(backX - 8f, backY - 2f, FPSMaster.fontManager.s18.getStringWidth(backLabel) + 16f, 20f, 0) != null) {
+                qaStep--;
+                // Clear the answer for the current step when going back
+                qaAnswers[qaStep + 1] = -1;
+            }
+        }
 
         if (qaStep == 1) {
             renderBackgroundPreviewChoices(x + 18f, cardY + 76f, cardWidth - 36f, questions[qaStep]);
@@ -785,18 +1063,31 @@ public class OobeScreen extends ScaledGuiScreen {
         float drawY = y + inset;
         float drawWidth = width - inset * 2f;
         float drawHeight = height - inset * 2f;
-        drawGlassCard(x, y, width, height, 18f,
-                new Color(255, 255, 255, 0),
-                new Color(255, 255, 255, 0));
-        Color fill = selected
-                ? new Color(122, 139, 255, 220)
-                : (hovered ? new Color(240, 244, 255, 248) : new Color(247, 249, 255, 246));
-        Color border = selected
-                ? new Color(164, 176, 255, 170)
-                : new Color(229, 235, 247, 210 + (int) (hoverAnim * 20f));
+
+        // Default state: transparent/gray, Hovered: gray semi-transparent, Selected: blue
+        Color fill;
+        Color border;
+
+        if (selected) {
+            // Selected: blue fill and border
+            fill = new Color(122, 139, 255, 220);
+            border = new Color(164, 176, 255, 170);
+        } else if (hovered) {
+            // Hovered but not selected: gray semi-transparent fill and border
+            int grayAlpha = (int) (180 + hoverAnim * 75);  // 180 -> 255
+            fill = new Color(240, 242, 248, grayAlpha);
+            border = new Color(200, 205, 220, (int) (200 + hoverAnim * 55));
+        } else {
+            // Default: no visible border, very light fill
+            fill = new Color(247, 249, 255, 246);
+            border = new Color(229, 235, 247, 180);
+        }
+
+        // Draw hover rectangle
         Rects.rounded(Math.round(drawX), Math.round(drawY), Math.round(drawWidth), Math.round(drawHeight), 18, fill.getRGB());
-        Rects.roundedBorder(Math.round(drawX), Math.round(drawY), Math.round(drawWidth), Math.round(drawHeight), 18, 1f, border.getRGB(), border.getRGB());
-        FPSMaster.fontManager.s18.drawString(label, x + 14f, y + 6f + pressAnim * 0.6f, selected ? Color.WHITE.getRGB() : panelTitleText().getRGB());
+        Rects.roundedBorder(Math.round(drawX), Math.round(drawY), Math.round(drawWidth), Math.round(drawHeight), 18, 1.5f, border.getRGB(), border.getRGB());
+        FPSMaster.fontManager.s18.drawString(label, drawX + 14f, drawY + drawHeight / 2f - 5f - pressAnim * 0.6f,
+                selected ? Color.WHITE.getRGB() : new Color(42, 52, 78).getRGB());
     }
 
     private void drawPreviewSurface(float x, float y, float width, float height) {
@@ -858,75 +1149,619 @@ public class OobeScreen extends ScaledGuiScreen {
             pendingBackgroundChoice = null;
             return false;
         }
-        double score = runShaderBenchmark();
-        shaderBenchmarkScore = score;
-        if (score < 18.0) {
-            pendingBackgroundChoice = "shader";
-            shaderWarningDialogVisible = true;
-            return false;
-        }
-        return true;
+        // Show benchmark confirmation dialog
+        shaderBenchmarkConfirmDialogVisible = true;
+        pendingBackgroundChoice = "shader";
+        return false;
     }
 
-    private double runShaderBenchmark() {
-        long start = System.nanoTime();
-        float width = clamp(guiWidth * 0.26f, 180f, 280f);
-        float height = clamp(guiHeight * 0.18f, 120f, 180f);
-        float x = guiWidth - width - 26f;
-        float y = 18f;
-        for (int i = 0; i < 180; i++) {
-            int alpha = 12 + (i % 6) * 6;
-            Rects.fill(x, y, width, height, new Color(44 + i % 24, 76 + i % 36, 128 + i % 40, alpha));
+    private void startShaderBenchmark() {
+        shaderBenchmarkConfirmDialogVisible = false;
+        shaderBenchmarkRunningDialogVisible = true;
+        shaderBenchmarkProgress = 0f;
+        shaderBenchmarkStartTime = System.nanoTime();
+
+        // Initialize benchmark state
+        benchmarkWarmupComplete = false;
+        benchmarkElapsedNs = 0;
+        benchmarkIterations = 0;
+        benchmarkProgramId = createBenchmarkShaderProgram();
+    }
+
+    private void enableShaderWithoutBenchmark() {
+        shaderBenchmarkConfirmDialogVisible = false;
+        shaderBenchmarkScore = 0;
+        confirmShaderBackgroundSelection();
+    }
+
+    private void confirmShaderBenchmarkResult() {
+        shaderBenchmarkResultDialogVisible = false;
+        confirmShaderBackgroundSelection();
+    }
+
+    private void cancelShaderBackgroundSelection() {
+        shaderBenchmarkConfirmDialogVisible = false;
+        shaderBenchmarkRunningDialogVisible = false;
+        shaderBenchmarkResultDialogVisible = false;
+        pendingBackgroundChoice = null;
+    }
+
+    private void confirmShaderBackgroundSelection() {
+        shaderWarningDialogVisible = false;
+        shaderBenchmarkResultDialogVisible = false;
+        pendingBackgroundChoice = null;
+        qaAnswers[qaStep] = 1; // shader option
+        applyQaAnswer();
+        if (qaStep < 2) {
+            qaStep++;
         }
-        GL11.glFlush();
-        long elapsed = Math.max(1L, System.nanoTime() - start);
-        return 1800000.0 / elapsed;
+    }
+
+    private void runWarmupPass() {
+        // Warmup using actual shader rendering to stabilize GPU
+        runShaderBenchmarkPass(30); // 30 iterations for warmup
+        // Force GPU to complete all work
+        GL11.glFinish();
+        // Small delay to let GPU stabilize
+        try {
+            Thread.sleep(100);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Run shader-based benchmark test
+     * Runs for exactly 5 seconds to ensure stable, consistent results
+     */
+    private double runBenchmarkTest() {
+        final long TEST_TIME_NS = 5_000_000_000L; // 5 seconds in nanoseconds
+        final int BATCH_SIZE = 10; // Run in batches to track progress
+
+        long startTime = System.nanoTime();
+        long elapsed = 0;
+        int totalIterations = 0;
+
+        // Run benchmark for exactly 5 seconds
+        while (elapsed < TEST_TIME_NS) {
+            // Run a batch of shader renderings
+            runShaderBenchmarkPass(BATCH_SIZE);
+            GL11.glFinish(); // Wait for GPU to complete
+
+            // Check elapsed time
+            elapsed = System.nanoTime() - startTime;
+            totalIterations += BATCH_SIZE;
+
+            // Safety check - don't run forever if something goes wrong
+            if (elapsed > TEST_TIME_NS * 2) {
+                break;
+            }
+        }
+
+        // Calculate score based on iterations per second
+        double elapsedSec = elapsed / 1_000_000_000.0;
+        double iterationsPerSec = totalIterations / elapsedSec;
+
+        // Normalize to a reasonable score range
+        // ~60 iter/sec at 5sec = 300 iter total ≈ score 25
+        // ~100 iter/sec at 5sec = 500 iter total ≈ score 50
+        return iterationsPerSec * 0.5;
+    }
+
+    /**
+     * Run shader rendering benchmark pass
+     * Uses a compute-intensive fragment shader that simulates shader background load
+     */
+    private void runShaderBenchmarkPass(int iterations) {
+        // Use a simplified shader-based test that mimics the actual shader background
+        // This creates a custom shader program for benchmarking
+        int benchmarkProgram = createBenchmarkShaderProgram();
+
+        float testWidth = 400f;
+        float testHeight = 300f;
+        float x = -testWidth - 10f; // Off-screen left (not visible)
+        float y = -testHeight - 10f; // Off-screen top (not visible)
+
+        // Save current OpenGL state
+        GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
+
+        try {
+            for (int i = 0; i < iterations; i++) {
+                // Setup viewport for test rendering
+                org.lwjgl.opengl.GL20.glUseProgram(benchmarkProgram);
+
+                // Set uniforms
+                int resolutionLoc = org.lwjgl.opengl.GL20.glGetUniformLocation(benchmarkProgram, "resolution");
+                int timeLoc = org.lwjgl.opengl.GL20.glGetUniformLocation(benchmarkProgram, "time");
+                int iterationLoc = org.lwjgl.opengl.GL20.glGetUniformLocation(benchmarkProgram, "iteration");
+
+                if (resolutionLoc >= 0) {
+                    org.lwjgl.opengl.GL20.glUniform2f(resolutionLoc, testWidth, testHeight);
+                }
+                if (timeLoc >= 0) {
+                    org.lwjgl.opengl.GL20.glUniform1f(timeLoc, i * 0.1f);
+                }
+                if (iterationLoc >= 0) {
+                    org.lwjgl.opengl.GL20.glUniform1i(iterationLoc, i);
+                }
+
+                // Render a full-screen quad that will invoke the fragment shader for every pixel
+                // This is GPU-intensive as it runs the fragment shader for each pixel
+                GL11.glBegin(GL11.GL_QUADS);
+                GL11.glTexCoord2f(0, 0);
+                GL11.glVertex2f(x, y);
+                GL11.glTexCoord2f(0, 1);
+                GL11.glVertex2f(x, y + testHeight);
+                GL11.glTexCoord2f(1, 1);
+                GL11.glVertex2f(x + testWidth, y + testHeight);
+                GL11.glTexCoord2f(1, 0);
+                GL11.glVertex2f(x + testWidth, y);
+                GL11.glEnd();
+            }
+        } finally {
+            // Restore OpenGL state
+            org.lwjgl.opengl.GL20.glUseProgram(0);
+            GL11.glPopAttrib();
+        }
+
+        // Clean up the test program
+        org.lwjgl.opengl.GL20.glDeleteProgram(benchmarkProgram);
+    }
+
+    /**
+     * Run shader benchmark pass using a pre-created shader program.
+     * More efficient when running multiple iterations.
+     */
+    private void runShaderBenchmarkPassOnProgram(int program, int iterations) {
+        if (program == 0) {
+            return;
+        }
+
+        float testWidth = 400f;
+        float testHeight = 300f;
+        float x = -testWidth - 10f; // Off-screen left (not visible)
+        float y = -testHeight - 10f; // Off-screen top (not visible)
+
+        // Save current OpenGL state
+        GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
+
+        try {
+            for (int i = 0; i < iterations; i++) {
+                org.lwjgl.opengl.GL20.glUseProgram(program);
+
+                int resolutionLoc = org.lwjgl.opengl.GL20.glGetUniformLocation(program, "resolution");
+                int timeLoc = org.lwjgl.opengl.GL20.glGetUniformLocation(program, "time");
+                int iterationLoc = org.lwjgl.opengl.GL20.glGetUniformLocation(program, "iteration");
+
+                if (resolutionLoc >= 0) {
+                    org.lwjgl.opengl.GL20.glUniform2f(resolutionLoc, testWidth, testHeight);
+                }
+                if (timeLoc >= 0) {
+                    org.lwjgl.opengl.GL20.glUniform1f(timeLoc, i * 0.1f);
+                }
+                if (iterationLoc >= 0) {
+                    org.lwjgl.opengl.GL20.glUniform1i(iterationLoc, i);
+                }
+
+                GL11.glBegin(GL11.GL_QUADS);
+                GL11.glTexCoord2f(0, 0);
+                GL11.glVertex2f(x, y);
+                GL11.glTexCoord2f(0, 1);
+                GL11.glVertex2f(x, y + testHeight);
+                GL11.glTexCoord2f(1, 1);
+                GL11.glVertex2f(x + testWidth, y + testHeight);
+                GL11.glTexCoord2f(1, 0);
+                GL11.glVertex2f(x + testWidth, y);
+                GL11.glEnd();
+            }
+        } finally {
+            org.lwjgl.opengl.GL20.glUseProgram(0);
+            GL11.glPopAttrib();
+        }
+    }
+
+    /**
+     * Create a compute-intensive shader program for benchmarking
+     * This shader performs per-pixel calculations similar to shader backgrounds
+     */
+    private int createBenchmarkShaderProgram() {
+        try {
+            int program = org.lwjgl.opengl.GL20.glCreateProgram();
+
+            // Simple vertex shader (passthrough) - no #version directive for compatibility
+            String vertexShaderSource =
+                    "attribute vec2 position;\n" +
+                    "attribute vec2 texcoord;\n" +
+                    "varying vec2 v_texcoord;\n" +
+                    "void main() {\n" +
+                    "  gl_Position = vec4(position, 0.0, 1.0);\n" +
+                    "  v_texcoord = texcoord;\n" +
+                    "}\n";
+
+            // Compute-intensive fragment shader that mimics shader background effects
+            // Includes: sine wave calculations, color mixing, noise simulation
+            String fragmentShaderSource =
+                    "varying vec2 v_texcoord;\n" +
+                    "uniform vec2 resolution;\n" +
+                    "uniform float time;\n" +
+                    "uniform int iteration;\n" +
+                    "\n" +
+                    "void main() {\n" +
+                    "  vec2 uv = v_texcoord;\n" +
+                    "  vec2 p = uv * 2.0 - 1.0;\n" +
+                    "  \n" +
+                    "  float t = time * 0.5 + float(iteration) * 0.01;\n" +
+                    "  \n" +
+                    "  for(int i = 0; i < 3; i++) {\n" +
+                    "    p.x += sin(p.y * 3.0 + t) * 0.1;\n" +
+                    "    p.y += cos(p.x * 2.5 + t * 0.8) * 0.1;\n" +
+                    "  }\n" +
+                    "  \n" +
+                    "  vec3 col = vec3(0.0);\n" +
+                    "  for(int i = 0; i < 2; i++) {\n" +
+                    "    col.r += sin(p.x + t + float(i)) * 0.3;\n" +
+                    "    col.g += cos(p.y + t * 0.7 + float(i)) * 0.3;\n" +
+                    "    col.b += sin(p.x + p.y + t * 1.3) * 0.3;\n" +
+                    "  }\n" +
+                    "  \n" +
+                    "  float d = length(p);\n" +
+                    "  col += vec3(sin(d * 5.0 - t), sin(d * 5.0 - t + 2.0), sin(d * 5.0 - t + 4.0)) * 0.2;\n" +
+                    "  \n" +
+                    "  col = abs(col) * 0.3 + 0.1;\n" +
+                    "  \n" +
+                    "  gl_FragColor = vec4(col, 1.0);\n" +
+                    "}\n";
+
+            int vertexShader = compileShader(vertexShaderSource, org.lwjgl.opengl.GL20.GL_VERTEX_SHADER);
+            int fragmentShader = compileShader(fragmentShaderSource, org.lwjgl.opengl.GL20.GL_FRAGMENT_SHADER);
+
+            if (vertexShader == 0 || fragmentShader == 0) {
+                return 0;
+            }
+
+            org.lwjgl.opengl.GL20.glAttachShader(program, vertexShader);
+            org.lwjgl.opengl.GL20.glAttachShader(program, fragmentShader);
+            org.lwjgl.opengl.GL20.glLinkProgram(program);
+
+            int linked = org.lwjgl.opengl.GL20.glGetProgrami(program, org.lwjgl.opengl.GL20.GL_LINK_STATUS);
+            if (linked == 0) {
+                String log = org.lwjgl.opengl.GL20.glGetProgramInfoLog(program, 512);
+                ClientLogger.error("Shader program link failed: " + log);
+                org.lwjgl.opengl.GL20.glDeleteProgram(program);
+                return 0;
+            }
+
+            // Clean up shader objects (they're now attached to the program)
+            org.lwjgl.opengl.GL20.glDeleteShader(vertexShader);
+            org.lwjgl.opengl.GL20.glDeleteShader(fragmentShader);
+
+            return program;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Compile a GLSL shader
+     */
+    private int compileShader(String source, int type) {
+        int shader = org.lwjgl.opengl.GL20.glCreateShader(type);
+        org.lwjgl.opengl.GL20.glShaderSource(shader, source);
+        org.lwjgl.opengl.GL20.glCompileShader(shader);
+
+        int compiled = org.lwjgl.opengl.GL20.glGetShaderi(shader, org.lwjgl.opengl.GL20.GL_COMPILE_STATUS);
+        if (compiled == 0) {
+            String typeName = type == org.lwjgl.opengl.GL20.GL_VERTEX_SHADER ? "vertex" : "fragment";
+            String log = org.lwjgl.opengl.GL20.glGetShaderInfoLog(shader, 512);
+            ClientLogger.error("Shader compilation failed (" + typeName + "): " + log);
+            ClientLogger.error("Shader source: " + source);
+            org.lwjgl.opengl.GL20.glDeleteShader(shader);
+            return 0;
+        }
+
+        return shader;
+    }
+
+    /**
+     * Compile a GLSL shader
+     */
+    private int compileShaderOld(String source, int type) {
+        int shader = org.lwjgl.opengl.GL20.glCreateShader(type);
+        org.lwjgl.opengl.GL20.glShaderSource(shader, source);
+        org.lwjgl.opengl.GL20.glCompileShader(shader);
+
+        int compiled = org.lwjgl.opengl.GL20.glGetShaderi(shader, org.lwjgl.opengl.GL20.GL_COMPILE_STATUS);
+        if (compiled == 0) {
+            org.lwjgl.opengl.GL20.glDeleteShader(shader);
+            return 0;
+        }
+
+        return shader;
     }
 
     private boolean isShaderBackgroundSupported() {
         return OSUtil.supportShader() && OpenGlHelper.shadersSupported && OpenGlHelper.framebufferSupported;
     }
 
-    private void confirmShaderBackgroundSelection() {
-        shaderWarningDialogVisible = false;
-        pendingBackgroundChoice = null;
-    }
-
-    private void cancelShaderBackgroundSelection() {
-        shaderWarningDialogVisible = false;
-        pendingBackgroundChoice = null;
-    }
-
     private boolean hasActiveModal() {
-        return shaderWarningDialogVisible || shaderUnsupportedDialogVisible;
+        return shaderWarningDialogVisible
+                || shaderUnsupportedDialogVisible
+                || shaderBenchmarkConfirmDialogVisible
+                || shaderBenchmarkRunningDialogVisible
+                || shaderBenchmarkResultDialogVisible;
     }
 
     private void renderShaderDialogs(int mouseX, int mouseY) {
         if (!hasActiveModal()) {
             return;
         }
+
         Rects.fill(0f, 0f, guiWidth, guiHeight, new Color(18, 22, 32, 92));
-        float width = clamp(guiWidth * 0.34f, 320f, 420f);
-        float height = shaderUnsupportedDialogVisible ? 154f : 176f;
+
+        // Render Benchmark Confirmation Dialog
+        if (shaderBenchmarkConfirmDialogVisible) {
+            renderBenchmarkConfirmDialog(mouseX, mouseY);
+            return;
+        }
+
+        // Render Benchmark Running Dialog
+        if (shaderBenchmarkRunningDialogVisible) {
+            renderBenchmarkRunningDialog();
+            return;
+        }
+
+        // Render Benchmark Result Dialog
+        if (shaderBenchmarkResultDialogVisible) {
+            renderBenchmarkResultDialog(mouseX, mouseY);
+            return;
+        }
+
+        // Render Unsupported Dialog
+        if (shaderUnsupportedDialogVisible) {
+            renderUnsupportedDialog(mouseX, mouseY);
+            return;
+        }
+
+        // Render Low Performance Warning Dialog (legacy, for old code path)
+        if (shaderWarningDialogVisible) {
+            renderLowPerformanceDialog(mouseX, mouseY);
+        }
+    }
+
+    private void renderBenchmarkConfirmDialog(int mouseX, int mouseY) {
+        float width = clamp(guiWidth * 0.38f, 360f, 460f);
+        float height = 220f;
         float x = (guiWidth - width) / 2f;
         float y = (guiHeight - height) / 2f;
+
         drawGlassCard(x, y, width, height, 22f, new Color(255, 255, 255, 244), new Color(229, 235, 247, 220));
-        String title = shaderUnsupportedDialogVisible
-                ? (isChinese() ? "Shader 背景不可用" : "Shader background unsupported")
-                : (isChinese() ? "是否继续使用？" : "Continue anyway?");
-        String body = shaderUnsupportedDialogVisible
-                ? (isChinese() ? "检测到当前设备不支持 shader 背景，已禁用该选项。" : "Your device does not support shader backgrounds. This option has been disabled.")
-                : (isChinese()
-                    ? "您的 GPU 性能较低，使用本背景样式可能引起卡顿，是否继续？\n基准分数: " + formatBenchmarkScore(shaderBenchmarkScore)
-                    : "Your GPU appears to be low performance. This background may cause stutter.\nBenchmark score: " + formatBenchmarkScore(shaderBenchmarkScore));
+
+        String title = isChinese() ? "GPU 性能测试" : "GPU Benchmark";
+        String body = isChinese()
+                ? "Shader 背景需要较高的 GPU 性能。建议进行性能测试以确定您的设备是否适合使用。"
+                : "Shader backgrounds require higher GPU performance. We recommend running a benchmark to check if your device is suitable.";
+
+        drawPanelTitle(title, x + 20f, y + 24f);
+        drawBodyText(body, x + 20f, y + 64f, width - 40f);
+
+        float btnY = y + height - 54f;
+        shaderBenchmarkConfirmYesButton.setText(isChinese() ? "运行测试" : "Run Test")
+                .renderInScreen(this, x + width - 274f, btnY, 88f, 30f, mouseX, mouseY);
+        shaderBenchmarkConfirmNoButton.setText(isChinese() ? "直接开启" : "Enable Anyway")
+                .renderInScreen(this, x + width - 180f, btnY, 88f, 30f, mouseX, mouseY);
+        shaderBenchmarkConfirmSkipButton.setText(isChinese() ? "取消" : "Cancel")
+                .renderInScreen(this, x + width - 86f, btnY, 76f, 30f, mouseX, mouseY);
+    }
+
+    private void renderBenchmarkRunningDialog() {
+        float width = clamp(guiWidth * 0.32f, 300f, 400f);
+        float height = 180f;
+        float x = (guiWidth - width) / 2f;
+        float y = (guiHeight - height) / 2f;
+
+        drawGlassCard(x, y, width, height, 22f, new Color(255, 255, 255, 244), new Color(229, 235, 247, 220));
+
+        String title = isChinese() ? "正在测试..." : "Running Benchmark...";
+        drawPanelTitle(title, x + 20f, y + 24f);
+
+        float progressY = y + 70f;
+        float progressWidth = width - 40f;
+        float progressHeight = 8f;
+        float progressX = x + 20f;
+
+        // Progress bar background
+        Rects.fill(progressX, progressY, progressWidth, progressHeight, new Color(40, 48, 64, 200));
+
+        // Execute a small chunk of benchmark each frame (on main thread with OpenGL context)
+        executeBenchmarkChunk();
+
+        // Determine current phase and status text based on progress
+        String statusText;
+        float fillWidth;
+
+        if (shaderBenchmarkProgress < 0.3f) {
+            // Warmup phase
+            float warmupProgress = shaderBenchmarkProgress / 0.3f;
+            fillWidth = progressWidth * warmupProgress * 0.5f;
+            statusText = isChinese() ? "正在预热 GPU..." : "Warming up GPU...";
+        } else {
+            // Actual benchmark phase (30%-100%)
+            float benchmarkProgress = (shaderBenchmarkProgress - 0.3f) / 0.7f;
+            fillWidth = progressWidth * (0.5f + benchmarkProgress * 0.5f);
+            statusText = isChinese() ? "正在运行着色器测试..." : "Running shader test...";
+        }
+
+        // Add subtle animation to the progress bar
+        float animatedWidth = fillWidth + (float) Math.sin(System.currentTimeMillis() / 100.0) * 2f;
+        animatedWidth = Math.min(animatedWidth, progressWidth);
+
+        Rects.fill(progressX, progressY, animatedWidth, progressHeight, new Color(122, 139, 255, 255));
+
+        float textWidth = FPSMaster.fontManager.s16.getStringWidth(statusText);
+        FPSMaster.fontManager.s16.drawString(statusText, progressX + (progressWidth - textWidth) / 2f, progressY + 20f, new Color(180, 188, 204).getRGB());
+    }
+
+    /**
+     * Execute a small chunk of the benchmark on each frame.
+     * This runs on the main thread with OpenGL context available.
+     */
+    private void executeBenchmarkChunk() {
+        final long TEST_TIME_NS = 5_000_000_000L; // 5 seconds
+        final int WARMUP_ITERATIONS = 20;
+        final int BATCHES_PER_FRAME = 5; // Execute 5 batches per frame to keep UI responsive
+
+        if (benchmarkProgramId == 0) {
+            // Shader compilation failed, abort with zero score
+            ClientLogger.error("Benchmark shader program failed to compile");
+            shaderBenchmarkScore = 0;
+            shaderBenchmarkRunningDialogVisible = false;
+            shaderBenchmarkResultDialogVisible = true;
+            return;
+        }
+
+        // Phase 1: Warmup (0-30% of progress)
+        if (!benchmarkWarmupComplete) {
+            runShaderBenchmarkPassOnProgram(benchmarkProgramId, WARMUP_ITERATIONS);
+            GL11.glFinish();
+            benchmarkWarmupComplete = true;
+            shaderBenchmarkProgress = 0.3f;
+            benchmarkElapsedNs = 0;
+            benchmarkIterations = 0;
+            benchmarkStartTime = System.nanoTime();
+            return;
+        }
+
+        // Phase 2: Actual benchmark (30-100% of progress)
+        long frameStartNs = System.nanoTime();
+        for (int i = 0; i < BATCHES_PER_FRAME && benchmarkElapsedNs < TEST_TIME_NS; i++) {
+            runShaderBenchmarkPassOnProgram(benchmarkProgramId, 10);
+            benchmarkIterations += 10;
+        }
+        GL11.glFinish();
+
+        benchmarkElapsedNs = System.nanoTime() - benchmarkStartTime;
+
+        // Update progress (30% to 100% during actual test)
+        double progressRatio = (double) benchmarkElapsedNs / TEST_TIME_NS;
+        shaderBenchmarkProgress = (float) (0.3 + Math.min(progressRatio, 1.0) * 0.7);
+
+        // Check if benchmark is complete
+        if (benchmarkElapsedNs >= TEST_TIME_NS) {
+            // Calculate final score
+            double elapsedSec = benchmarkElapsedNs / 1_000_000_000.0;
+            double iterationsPerSec = benchmarkIterations / elapsedSec;
+            shaderBenchmarkScore = iterationsPerSec * 0.5;
+
+            // Clean up shader program
+            org.lwjgl.opengl.GL20.glDeleteProgram(benchmarkProgramId);
+            benchmarkProgramId = 0;
+
+            // Show result
+            shaderBenchmarkRunningDialogVisible = false;
+            shaderBenchmarkResultDialogVisible = true;
+            shaderBenchmarkProgress = 1.0f;
+        }
+    }
+
+    private void renderBenchmarkResultDialog(int mouseX, int mouseY) {
+        float width = clamp(guiWidth * 0.36f, 340f, 440f);
+        float height = 240f;
+        float x = (guiWidth - width) / 2f;
+        float y = (guiHeight - height) / 2f;
+
+        // Determine if score is good enough (threshold: 25)
+        boolean isGoodScore = shaderBenchmarkScore >= 25.0;
+        Color titleColor = isGoodScore ? new Color(100, 200, 140) : new Color(240, 160, 100);
+
+        drawGlassCard(x, y, width, height, 22f, new Color(255, 255, 255, 244), new Color(229, 235, 247, 220));
+
+        String title = isChinese()
+                ? (isGoodScore ? "GPU 性能良好" : "GPU 性能较低")
+                : (isGoodScore ? "GPU Performance Good" : "GPU Performance Low");
+        String scoreText = isChinese()
+                ? ("测试分数: " + formatBenchmarkScore(shaderBenchmarkScore))
+                : ("Benchmark Score: " + formatBenchmarkScore(shaderBenchmarkScore));
+
+        // Draw title with custom color
+        if (contentWidth() < 520f) {
+            FPSMaster.fontManager.s24.drawString(title, x + 20f, y + 24f, titleColor.getRGB());
+        } else if (contentWidth() < 700f) {
+            FPSMaster.fontManager.s28.drawString(title, x + 20f, y + 24f, titleColor.getRGB());
+        } else {
+            FPSMaster.fontManager.s36.drawString(title, x + 20f, y + 24f, titleColor.getRGB());
+        }
+
+        float scoreY = y + 64f;
+        String formattedScore = String.format("%.1f", shaderBenchmarkScore);
+        float scoreTextWidth = FPSMaster.fontManager.s28.getStringWidth(formattedScore);
+        FPSMaster.fontManager.s28.drawString(formattedScore, x + (width - scoreTextWidth) / 2f, scoreY, titleColor.getRGB());
+        FPSMaster.fontManager.s16.drawString(scoreText, x + (width - FPSMaster.fontManager.s16.getStringWidth(scoreText)) / 2f, scoreY + 34f, new Color(160, 168, 184).getRGB());
+
+        String body;
+        if (isGoodScore) {
+            body = isChinese()
+                    ? "您的 GPU 性能足以流畅运行 Shader 背景效果。"
+                    : "Your GPU performance is sufficient for smooth shader background effects.";
+        } else {
+            body = isChinese()
+                    ? "您的 GPU 性能可能不足以流畅运行 Shader 背景，开启后可能出现卡顿。是否仍要开启？"
+                    : "Your GPU may not handle shader backgrounds smoothly. You may experience stuttering. Continue anyway?";
+        }
+
+        drawBodyText(body, x + 20f, y + 120f, width - 40f);
+
+        float btnY = y + height - 54f;
+        if (isGoodScore) {
+            shaderBenchmarkResultOkButton.setText(isChinese() ? "开启 Shader 背景" : "Enable Shader")
+                    .renderInScreen(this, x + width - 126f, btnY, 106f, 30f, mouseX, mouseY);
+        } else {
+            shaderCancelButton.setText(isChinese() ? "取消" : "Cancel")
+                    .renderInScreen(this, x + width - 210f, btnY, 88f, 30f, mouseX, mouseY);
+            shaderContinueButton.setText(isChinese() ? "仍要开启" : "Enable Anyway")
+                    .renderInScreen(this, x + width - 110f, btnY, 102f, 30f, mouseX, mouseY);
+        }
+    }
+
+    private void renderUnsupportedDialog(int mouseX, int mouseY) {
+        float width = clamp(guiWidth * 0.32f, 300f, 400f);
+        float height = 170f;
+        float x = (guiWidth - width) / 2f;
+        float y = (guiHeight - height) / 2f;
+
+        drawGlassCard(x, y, width, height, 22f, new Color(255, 255, 255, 244), new Color(229, 235, 247, 220));
+
+        String title = isChinese() ? "Shader 背景不可用" : "Shader background unsupported";
+        String body = isChinese()
+                ? "检测到当前设备不支持 shader 背景，已禁用该选项。"
+                : "Your device does not support shader backgrounds. This option has been disabled.";
+
+        drawPanelTitle(title, x + 20f, y + 24f);
+        drawBodyText(body, x + 20f, y + 64f, width - 40f);
+
+        shaderUnsupportedOkButton.setText(isChinese() ? "知道了" : "OK")
+                .renderInScreen(this, x + width - 108f, y + height - 44f, 88f, 30f, mouseX, mouseY);
+    }
+
+    private void renderLowPerformanceDialog(int mouseX, int mouseY) {
+        float width = clamp(guiWidth * 0.34f, 320f, 420f);
+        float height = 176f;
+        float x = (guiWidth - width) / 2f;
+        float y = (guiHeight - height) / 2f;
+
+        drawGlassCard(x, y, width, height, 22f, new Color(255, 255, 255, 244), new Color(229, 235, 247, 220));
+
+        String title = isChinese() ? "是否继续使用？" : "Continue anyway?";
+        String body = isChinese()
+                ? "您的 GPU 性能较低，使用本背景样式可能引起卡顿，是否继续？\n基准分数: " + formatBenchmarkScore(shaderBenchmarkScore)
+                : "Your GPU appears to be low performance. This background may cause stutter.\nBenchmark score: " + formatBenchmarkScore(shaderBenchmarkScore);
+
         drawPanelTitle(title, x + 20f, y + 24f);
         drawBodyText(body, x + 20f, y + 60f, width - 40f);
-        if (shaderUnsupportedDialogVisible) {
-            shaderUnsupportedOkButton.setText(isChinese() ? "知道了" : "OK").renderInScreen(this, x + width - 108f, y + height - 44f, 88f, 30f, mouseX, mouseY);
-        } else {
-            shaderCancelButton.setText(isChinese() ? "取消" : "Cancel").renderInScreen(this, x + width - 210f, y + height - 44f, 88f, 30f, mouseX, mouseY);
-            shaderContinueButton.setText(isChinese() ? "继续" : "Continue").renderInScreen(this, x + width - 110f, y + height - 44f, 88f, 30f, mouseX, mouseY);
-        }
+
+        shaderCancelButton.setText(isChinese() ? "取消" : "Cancel")
+                .renderInScreen(this, x + width - 210f, y + height - 44f, 88f, 30f, mouseX, mouseY);
+        shaderContinueButton.setText(isChinese() ? "继续" : "Continue")
+                .renderInScreen(this, x + width - 110f, y + height - 44f, 88f, 30f, mouseX, mouseY);
     }
 
     private String formatBenchmarkScore(double score) {
@@ -1175,6 +2010,11 @@ public class OobeScreen extends ScaledGuiScreen {
         savedQaAnswers[2] = -1;
         savedBackgroundChoice = FPSMaster.configManager.configure.background == null ? "panorama_1" : FPSMaster.configManager.configure.background;
         savedLoginSkipped = true;
+        savedIsLoggingIn = false;
+        savedLoginError = null;
+        savedLoginWelcomeShown = false;
+        savedWelcomeUsername = null;
+        savedWelcomeUserLevel = 0;
         savedFeatureCount = 5;
         savedAccountText = "";
         savedPasswordText = "";
@@ -1196,7 +2036,15 @@ public class OobeScreen extends ScaledGuiScreen {
         qaAnswers[2] = savedQaAnswers[2];
         backgroundChoice = savedBackgroundChoice;
         loginSkipped = savedLoginSkipped;
+        isLoggingIn = savedIsLoggingIn;
+        loginError = savedLoginError;
+        loginWelcomeShown = savedLoginWelcomeShown;
+        welcomeUsername = savedWelcomeUsername;
+        welcomeUserLevel = savedWelcomeUserLevel;
         featureCount = savedFeatureCount;
+        // Reset temporary UI states
+        expandedFeatureCard = -1;
+        featureDetailExpand = 0f;
     }
 
     private void syncSessionState() {
@@ -1212,6 +2060,11 @@ public class OobeScreen extends ScaledGuiScreen {
         savedQaAnswers[2] = qaAnswers[2];
         savedBackgroundChoice = backgroundChoice;
         savedLoginSkipped = loginSkipped;
+        savedIsLoggingIn = isLoggingIn;
+        savedLoginError = loginError;
+        savedLoginWelcomeShown = loginWelcomeShown;
+        savedWelcomeUsername = welcomeUsername;
+        savedWelcomeUserLevel = welcomeUserLevel;
         savedFeatureCount = featureCount;
         if (accountField != null) {
             savedAccountText = accountField.getText();
