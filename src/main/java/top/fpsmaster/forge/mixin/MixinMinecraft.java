@@ -136,7 +136,7 @@ public abstract class MixinMinecraft implements IMinecraft {
 
         Gui.drawRect(0, 0, sr.getScaledWidth(), sr.getScaledHeight(), new Color(20, 20, 20).getRGB());
 
-        Images.draw(new ResourceLocation("client/gui/logo.png"), sr.getScaledWidth() / 2f - 153 / 4f, sr.getScaledHeight() / 2f - 30, 153 / 2f, 67f, -1);
+        Images.drawSmooth(new ResourceLocation("client/gui/logo.png"), sr.getScaledWidth() / 2f - 84f / 2f, sr.getScaledHeight() / 2f - 30, 84f, 65f, -1);
 
 //        float width = 400;
 //        float height = 250;

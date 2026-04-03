@@ -124,7 +124,7 @@ public class MainMenu extends ScaledGuiScreen {
             FPSMaster.fontManager.s16.drawCenteredString(FPSMaster.i18n.get("mainmenu.javatip"), guiWidth / 2f, guiHeight / 2f + 50, Color.WHITE.getRGB());
         }
         Rects.fill(0, 0, guiWidth, guiHeight, new Color(20, 20, 20, (int) (255 - 255 * Math.max(0, (float) backgroundAnimation.get() - 0.5f))));
-        Images.draw(new ResourceLocation("client/gui/logo.png"), guiWidth / 2f - 153 / 4f, guiHeight / 2f - 30 - 70 * ((float) Math.min(startAnimation.get(), 1)), 153 / 2f, 67f, -1);
+        Images.drawSmooth(new ResourceLocation("client/gui/logo.png"), guiWidth / 2f - 84f / 2f, guiHeight / 2f - 30 - 70 * ((float) Math.min(startAnimation.get(), 1)), 84f, 65f, -1);
         handlePendingClick();
     }
 

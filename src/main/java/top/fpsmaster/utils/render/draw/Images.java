@@ -44,11 +44,19 @@ public class Images {
         draw(res, x, y, width, height, color, false);
     }
 
+    public static void drawSmooth(ResourceLocation res, float x, float y, float width, float height, int color) {
+        draw(res, x, y, width, height, color, false, true);
+    }
+
     public static void draw(ResourceLocation res, int x, int y, int width, int height, int color) {
         draw(res, x, y, width, height, color, false);
     }
 
     public static void draw(ResourceLocation res, float x, float y, float width, float height, int color, boolean rawImage) {
+        draw(res, x, y, width, height, color, rawImage, false);
+    }
+
+    private static void draw(ResourceLocation res, float x, float y, float width, float height, int color, boolean rawImage, boolean smoothSampling) {
         x = UiScale.scale(x);
         y = UiScale.scale(y);
         width = UiScale.scale(width);
@@ -61,7 +69,17 @@ public class Images {
             glColor(color);
         }
         Minecraft.getMinecraft().getTextureManager().bindTexture(res);
+        int prevMinFilter = GL11.glGetTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER);
+        int prevMagFilter = GL11.glGetTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER);
+        if (smoothSampling) {
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
+        }
         drawModalRectWithCustomSizedTexture(x, y, 0, 0, width, height, width, height);
+        if (smoothSampling) {
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, prevMinFilter);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, prevMagFilter);
+        }
         if (!rawImage) {
             glDepthMask(true);
             glDisable(GL_BLEND);
@@ -147,4 +165,3 @@ public class Images {
         tessellator.draw();
     }
 }
-
