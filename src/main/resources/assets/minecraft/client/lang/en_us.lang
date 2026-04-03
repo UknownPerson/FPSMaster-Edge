@@ -565,6 +565,7 @@ smoothzoom.smoothzoom=Enable Smooth Zoom
 smoothzoom.speed=Zoom Speed
 smoothzoom.zoombind=Zoom Keybind
 smoothzoom.smoothmouse=Smooth Mouse Input
+smoothzoom.wheelzoom=Mouse Wheel Zoom
 
 skinchanger=Skin Changer
 skinchanger.skin=Skin Name
