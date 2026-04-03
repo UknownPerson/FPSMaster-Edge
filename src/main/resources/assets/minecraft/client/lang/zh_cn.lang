@@ -569,6 +569,7 @@ smoothzoom.smoothzoom=缩放平滑
 smoothzoom.speed=速度
 smoothzoom.zoombind=快捷键
 smoothzoom.smoothmouse=鼠标平滑
+smoothzoom.wheelzoom=鼠标滚轮缩放
 
 skinchanger=皮肤修改器
 skinchanger.skin=皮肤名称

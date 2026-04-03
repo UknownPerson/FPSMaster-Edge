@@ -96,15 +96,15 @@ public abstract class MixinEntityRenderer {
                 if (SmoothZoom.zoom) {
                     if (useFOVSetting) {
                         if (SmoothZoom.smoothCamera.getValue()) {
-                            screenScale = MathUtils.decreasedSpeed(screenScale, f, f / 4.0F, SmoothZoom.speed.getValue().floatValue() / (float) Minecraft.getDebugFPS() * 150.0f);
+                            screenScale = MathUtils.decreasedSpeed(screenScale, f, f / SmoothZoom.zoomScale, SmoothZoom.speed.getValue().floatValue() / (float) Minecraft.getDebugFPS() * 150.0f);
                         } else {
-                            screenScale = f / 4.0F;
+                            screenScale = f / SmoothZoom.zoomScale;
                         }
                     } else {
                         if (SmoothZoom.smoothCamera.getValue()) {
-                            screenScale2 = MathUtils.decreasedSpeed(screenScale2, f, f / 4.0F, SmoothZoom.speed.getValue().floatValue() / (float) Minecraft.getDebugFPS() * 150.0f);
+                            screenScale2 = MathUtils.decreasedSpeed(screenScale2, f, f / SmoothZoom.zoomScale, SmoothZoom.speed.getValue().floatValue() / (float) Minecraft.getDebugFPS() * 150.0f);
                         } else {
-                            screenScale2 = f / 4.0F;
+                            screenScale2 = f / SmoothZoom.zoomScale;
                         }
                     }
                 }
@@ -112,13 +112,13 @@ public abstract class MixinEntityRenderer {
                 if (!SmoothZoom.zoom) {
                     if (useFOVSetting) {
                         if (SmoothZoom.smoothCamera.getValue()) {
-                            screenScale = MathUtils.decreasedSpeed(screenScale, f / 4.0F, f, SmoothZoom.speed.getValue().floatValue() / (float) Minecraft.getDebugFPS() * 150.0f);
+                            screenScale = MathUtils.decreasedSpeed(screenScale, f / SmoothZoom.zoomScale, f, SmoothZoom.speed.getValue().floatValue() / (float) Minecraft.getDebugFPS() * 150.0f);
                         } else {
                             screenScale = f;
                         }
                     } else {
                         if (SmoothZoom.smoothCamera.getValue()) {
-                            screenScale2 = MathUtils.decreasedSpeed(screenScale2, f / 4.0F, f, SmoothZoom.speed.getValue().floatValue() / (float) Minecraft.getDebugFPS() * 150.0f);
+                            screenScale2 = MathUtils.decreasedSpeed(screenScale2, f / SmoothZoom.zoomScale, f, SmoothZoom.speed.getValue().floatValue() / (float) Minecraft.getDebugFPS() * 150.0f);
                         } else {
                             screenScale2 = f;
                         }
