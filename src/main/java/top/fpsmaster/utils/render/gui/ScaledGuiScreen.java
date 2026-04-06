@@ -26,7 +26,6 @@ public class ScaledGuiScreen extends GuiScreen {
     public float guiWidth;
     public float guiHeight;
 
-    private float clientScaleFactor = 1.0f;
     private float renderScale = 1.0f;
     private float vanillaScaleFactor = 1.0f;
     private final GuiInputState inputState = new GuiInputState();
@@ -128,10 +127,6 @@ public class ScaledGuiScreen extends GuiScreen {
     }
 
     private void refreshScaleAndMetrics() {
-        clientScaleFactor = (float) ClientSettings.getUiScaleMultiplier();
-        if (clientScaleFactor <= 0f) {
-            clientScaleFactor = 1.0f;
-        }
         updateBaseMetrics();
     }
 
@@ -139,8 +134,8 @@ public class ScaledGuiScreen extends GuiScreen {
         Minecraft mc = Minecraft.getMinecraft();
         ScaledResolution scaledResolution = new ScaledResolution(mc);
         vanillaScaleFactor = Math.max(1, scaledResolution.getScaleFactor());
-        scaleFactor = vanillaScaleFactor * clientScaleFactor;
-        renderScale = clientScaleFactor;
+        scaleFactor = (float) ClientSettings.getUiScale();
+        renderScale = ClientSettings.getUiRenderScale();
         if (renderScale <= 0f) {
             renderScale = 1.0f;
         }

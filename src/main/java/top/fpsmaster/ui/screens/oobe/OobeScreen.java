@@ -76,7 +76,7 @@ public class OobeScreen extends ScaledGuiScreen {
 
     private int page;
     private int languageValue;
-    private boolean fixedScaleEnabled;
+    private boolean followGameScaleEnabled;
     private int fixedScaleIndex;
     private int tutorialIndex;
     private int hoveredFeature = -1;
@@ -183,7 +183,7 @@ public class OobeScreen extends ScaledGuiScreen {
         greetingCurrentText = animatedGreeting();
         greetingPreviousText = greetingCurrentText;
         greetingTransition = 1f;
-        scaleDropdown.setItems(SCALE_LABELS).setSelectedIndex(fixedScaleIndex).setEnabled(fixedScaleEnabled);
+        scaleDropdown.setItems(SCALE_LABELS).setSelectedIndex(fixedScaleIndex).setEnabled(true);
 
         accountField = new TextField(FPSMaster.fontManager.s18, key("oobe.login.account.placeholder"),
                 new Color(255, 255, 255, 0).getRGB(), new Color(36, 44, 60).getRGB(), 32);
@@ -331,21 +331,16 @@ public class OobeScreen extends ScaledGuiScreen {
         drawBodyText(key("oobe.scale.desc"), x, topY + 58f, layoutWidth - 18f);
 
         float pillY = topY + 86f;
-        float pillW = clamp((layoutWidth - 12f) * 0.44f, 138f, 176f);
-        renderPill(x, pillY, pillW, 34f, fixedScaleEnabled, key("oobe.scale.fixed"));
-        renderPill(x + pillW + 12f, pillY, pillW + 12f, 34f, !fixedScaleEnabled, key("oobe.scale.follow"));
+        float pillW = clamp(layoutWidth * 0.48f, 180f, 240f);
+        renderPill(x, pillY, pillW, 34f, followGameScaleEnabled, key("oobe.scale.follow"));
 
         if (consumePressInBounds(x, pillY, pillW, 34f, 0) != null) {
-            fixedScaleEnabled = true;
-            applyLiveScaleSettings();
-        }
-        if (consumePressInBounds(x + pillW + 12f, pillY, pillW + 12f, 34f, 0) != null) {
-            fixedScaleEnabled = false;
+            followGameScaleEnabled = !followGameScaleEnabled;
             applyLiveScaleSettings();
         }
 
         float dropdownY = pillY + 44f;
-        scaleDropdown.setLabel(key("oobe.scale.label")).setItems(SCALE_LABELS).setSelectedIndex(fixedScaleIndex).setEnabled(fixedScaleEnabled);
+        scaleDropdown.setLabel(key("oobe.scale.label")).setItems(SCALE_LABELS).setSelectedIndex(fixedScaleIndex).setEnabled(true);
         scaleDropdown.renderInScreen(this, x, dropdownY, clamp(layoutWidth * 0.40f, 172f, 220f), 32f, mouseX, mouseY);
         fixedScaleIndex = scaleDropdown.getSelectedIndex();
         if (scaleDropdown.consumeSelectionChanged()) {
@@ -847,7 +842,7 @@ public class OobeScreen extends ScaledGuiScreen {
 
     private void applySelections() {
         ClientSettings.language.setValue(languageValue);
-        ClientSettings.fixedScaleEnabled.setValue(fixedScaleEnabled);
+        ClientSettings.followGameScale.setValue(followGameScaleEnabled);
         ClientSettings.fixedScale.setValue(fixedScaleIndex);
 
         FPSMaster.configManager.configure.background = backgroundChoice;
@@ -1990,7 +1985,7 @@ public class OobeScreen extends ScaledGuiScreen {
     }
 
     private void applyLiveScaleSettings() {
-        ClientSettings.fixedScaleEnabled.setValue(fixedScaleEnabled);
+        ClientSettings.followGameScale.setValue(followGameScaleEnabled);
         ClientSettings.fixedScale.setValue(fixedScaleIndex);
     }
 
@@ -2024,7 +2019,7 @@ public class OobeScreen extends ScaledGuiScreen {
     private void restoreSessionState() {
         page = savedPage;
         languageValue = savedLanguageValue;
-        fixedScaleEnabled = ClientSettings.fixedScaleEnabled.getValue();
+        followGameScaleEnabled = ClientSettings.followGameScale.getValue();
         fixedScaleIndex = ClientSettings.fixedScale.getValue();
         tutorialIndex = savedTutorialIndex;
         antiCheatEnabled = savedAntiCheatEnabled;

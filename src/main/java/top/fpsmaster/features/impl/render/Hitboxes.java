@@ -43,30 +43,33 @@ public class Hitboxes extends Module {
         if (mc.theWorld == null) {
             return;
         }
+        GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_COLOR_BUFFER_BIT | GL11.GL_CURRENT_BIT | GL11.GL_LINE_BIT);
         GL11.glPushMatrix();
-        GL11.glDisable(GL11.GL_TEXTURE_2D);
-        GL11.glEnable(GL11.GL_BLEND);
-        GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-        GL11.glLineWidth(1.0f);
-        Color outline = color.getColor();
-        GL11.glColor4f(
-                outline.getRed() / 255f,
-                outline.getGreen() / 255f,
-                outline.getBlue() / 255f,
-                outline.getAlpha() / 255f
-        );
-        IRenderManager renderManager = (IRenderManager) mc.getRenderManager();
-        for (Entity entity : mc.theWorld.loadedEntityList) {
-            if (entity == mc.thePlayer) {
-                continue;
+        try {
+            GL11.glDisable(GL11.GL_TEXTURE_2D);
+            GL11.glEnable(GL11.GL_BLEND);
+            GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+            GL11.glLineWidth(1.0f);
+            Color outline = color.getColor();
+            GL11.glColor4f(
+                    outline.getRed() / 255f,
+                    outline.getGreen() / 255f,
+                    outline.getBlue() / 255f,
+                    outline.getAlpha() / 255f
+            );
+            IRenderManager renderManager = (IRenderManager) mc.getRenderManager();
+            for (Entity entity : mc.theWorld.loadedEntityList) {
+                if (entity == mc.thePlayer) {
+                    continue;
+                }
+                AxisAlignedBB bb = entity.getEntityBoundingBox()
+                        .offset(-renderManager.renderPosX(), -renderManager.renderPosY(), -renderManager.renderPosZ());
+                Render3DUtils.drawBoundingBoxOutline(bb);
             }
-            AxisAlignedBB bb = entity.getEntityBoundingBox()
-                    .offset(-renderManager.renderPosX(), -renderManager.renderPosY(), -renderManager.renderPosZ());
-            Render3DUtils.drawBoundingBoxOutline(bb);
+        } finally {
+            GL11.glPopMatrix();
+            GL11.glPopAttrib();
         }
-        GL11.glDisable(GL11.GL_BLEND);
-        GL11.glEnable(GL11.GL_TEXTURE_2D);
-        GL11.glPopMatrix();
     }
 }
 
