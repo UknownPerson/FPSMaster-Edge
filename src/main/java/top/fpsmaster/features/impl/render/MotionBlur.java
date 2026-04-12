@@ -1,7 +1,6 @@
 package top.fpsmaster.features.impl.render;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.renderer.EntityRenderer;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.OpenGlHelper;
@@ -129,13 +128,12 @@ public class MotionBlur extends Module {
 
     public static void blur(float multiplier) {
         if (OpenGlHelper.isFramebufferEnabled()) {
-            ScaledResolution sr = new ScaledResolution(Minecraft.getMinecraft());
             int width = Minecraft.getMinecraft().getFramebuffer().framebufferWidth;
             int height = Minecraft.getMinecraft().getFramebuffer().framebufferHeight;
 
             GlStateManager.matrixMode(GL11.GL_PROJECTION);
             GlStateManager.loadIdentity();
-            GlStateManager.ortho(0.0, (double) width / sr.getScaleFactor(), (double) height / sr.getScaleFactor(), 0.0, 2000.0, 4000.0);
+            GlStateManager.ortho(0.0, width, height, 0.0, 2000.0, 4000.0);
             GlStateManager.matrixMode(GL11.GL_MODELVIEW);
             GlStateManager.loadIdentity();
             GlStateManager.translate(0f, 0f, -2000f);
@@ -146,30 +144,25 @@ public class MotionBlur extends Module {
             blurBufferInto.framebufferClear();
             blurBufferInto.bindFramebuffer(true);
 
-            OpenGlHelper.glBlendFunc(770, 771, 0, 1); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
-            GlStateManager.disableLighting();
+            OpenGlHelper.glBlendFunc(770, 771, 0, 1); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHAGlStateManager.disableLighting();
             GlStateManager.disableFog();
             GlStateManager.disableBlend();
 
             Minecraft.getMinecraft().getFramebuffer().bindFramebufferTexture();
             GlStateManager.color(1f, 1f, 1f, 1f);
-            drawTexturedRectNoBlend(0f, 0f, width / sr.getScaleFactor(), height / sr.getScaleFactor(),
-                    0f, 1f, 0f, 1f, 9728);
+            drawTexturedRectNoBlend(0f, 0f, width, height, 0f, 1f, 0f, 1f, 9728);
 
             GlStateManager.enableBlend();
             blurBufferMain.bindFramebufferTexture();
             GlStateManager.color(1f, 1f, 1f, multiplier / 10 - 0.1f);
-            drawTexturedRectNoBlend(0f, 0f, width / sr.getScaleFactor(), height / sr.getScaleFactor(),
-                    0f, 1f, 1f, 0f, 9728);
+            drawTexturedRectNoBlend(0f, 0f, width, height, 0f, 1f, 0f, 1f, 9728);
 
             Minecraft.getMinecraft().getFramebuffer().bindFramebuffer(true);
             blurBufferInto.bindFramebufferTexture();
             GlStateManager.color(1f, 1f, 1f, 1f);
             GlStateManager.enableBlend();
             OpenGlHelper.glBlendFunc(770, 771, 1, 771);
-
-            drawTexturedRectNoBlend(0f, 0f, width / sr.getScaleFactor(), height / sr.getScaleFactor(),
-                    0f, 1f, 0f, 1f, 9728);
+            drawTexturedRectNoBlend(0f, 0f, width, height, 0f, 1f, 0f, 1f, 9728);
 
             Framebuffer tempBuff = blurBufferMain;
             blurBufferMain = blurBufferInto;
